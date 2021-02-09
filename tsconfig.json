@@ -22,8 +22,10 @@
       "scripthost"
     ]
   },
+  "types": ["node"],
   "include": [
     "lib/**/*.ts",
+    "src/**/*.ts",
     "index.ts"
   ],
   "exclude": [
