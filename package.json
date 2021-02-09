@@ -1,0 +1,24 @@
+{
+  "name": "app-explorer",
+  "version": "1.0.0",
+  "description": "DApp explorer for ZilPay",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zilpay/app-explorer.git"
+  },
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/zilpay/app-explorer/issues"
+  },
+  "homepage": "https://github.com/zilpay/app-explorer#readme",
+  "devDependencies": {
+    "ts-node": "^9.1.1",
+    "tslint": "^6.1.3",
+    "typescript": "^4.1.3"
+  }
+}

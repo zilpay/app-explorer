@@ -1,0 +1,13 @@
+node_modules
+# tmp
+.idea
+.DS_Store
+
+# lib
+node_modules
+
+# build
+**/*.d.ts
+
+*.sql
+.env
