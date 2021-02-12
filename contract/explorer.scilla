@@ -15,12 +15,6 @@ let one_msg =
     let nil_msg = Nil {Message} in
     Cons {Message} msg nil_msg
 
-let two_msgs =
-  fun (msg1 : Message) =>
-  fun (msg2 : Message) =>
-    let msgs_tmp = one_msg msg2 in
-    Cons {Message} msg1 msgs_tmp
-
 (* Custom ADT storing - Title ipfs_description, url, ipfs_image, ipfs_icon *)
 type App =
 | App of String String String String String
@@ -58,6 +52,7 @@ contract ZilPayExplorer
 
 (* Mutable fields *)
 field pause: Bool = False
+field price_for_ad: Uint128 = Uint128 10000000000000
 field contract_proxy_zlp: ByStr20 = proxy_zlp
 field wait_list_app: Map ByStr20 App = Emp ByStr20 App
 field app_list: Map ByStr20 App = Emp ByStr20 App
@@ -113,6 +108,24 @@ procedure IsContractOwner()
   end
 end
 
+procedure AcceptZLP(amount: Uint128, from: ByStr20)
+  proxy_zlp_address <- contract_proxy_zlp;
+
+  call_accept_zlp = {
+    _tag: "AcceptZLP";
+    _recipient: proxy_zlp_address;
+    _amount: Uint128 0;
+    from: from;
+    amount: amount
+  };
+
+  msgs = one_msg call_accept_zlp;
+
+  send msgs
+end
+
+
+(* Admin transitions *)
 transition ConfigurePause()
   IsContractOwner;
   curent_pause <- pause;
@@ -133,6 +146,42 @@ transition ConfigurePause()
   event e
 end
 
+transition ConfigureADPrice(new_price: Uint128)
+  IsContractOwner;
+
+  old_price <- price_for_ad;
+
+  price_for_ad := new_price;
+
+  e = {
+    _eventname : "ConfiguredAdPriceEvent";
+    old_price: old_price;
+    new_price: new_price
+  };
+  event e
+end
+
+transition RemoveApp(app_owner: ByStr20)
+  IsContractOwner;
+
+  some_app <- wait_list_app[app_owner];
+
+  match some_app with
+  | Some app =>
+    delete wait_list_app[app_owner];
+
+    e = {
+      _eventname : "AppRemoveEvent";
+      removed_app: app;
+      app_owner: app_owner
+    };
+    event e
+  | None =>
+    err = CodeNotFound;
+    ThrowError err
+  end
+end
+
 transition ConfigureProxyZLP(contractAddr: ByStr20)
   IsContractOwner;
 
@@ -141,18 +190,15 @@ transition ConfigureProxyZLP(contractAddr: ByStr20)
   contract_proxy_zlp := contractAddr;
 
   e = {
-    _eventname : "TransferZLPFrom";
+    _eventname : "ConfigureProxyZLPEvent";
     new_proxy_zlp: contractAddr;
     old_proxy_zlp: old_proxy_zlp
   };
   event e
 end
+(* Admin transitions *)
 
-transition AddApp(app: App)
-  (* need add ZLP logic *)
-  wait_list_app[_sender] := app
-end
-
+(* Validator transitions *)
 transition ValidationAppSuccess(app_owner: ByStr20)
   IsValidator _sender;
   IsExistsApp app_owner;
@@ -181,15 +227,15 @@ transition ValidationAppReject(app_owner: ByStr20)
   IsValidator _sender;
   IsExistsApp app_owner;
 
-  some_confirmed_app <- wait_list_app[app_owner];
+  some_rejected_app <- wait_list_app[app_owner];
 
-  match some_confirmed_app with
-  | Some confirmed_app =>
+  match some_rejected_app with
+  | Some rejected_app =>
     delete wait_list_app[app_owner];
 
     e = {
-      _eventname : "ValidationAppReject";
-      app: confirmed_app;
+      _eventname : "ValidationAppRejectEvent";
+      app: rejected_app;
       app_owner: app_owner
     };
     event e
@@ -198,3 +244,17 @@ transition ValidationAppReject(app_owner: ByStr20)
     ThrowError err
   end
 end
+(* Validator transitions *)
+
+(* User transitions *)
+transition AddApp(app: App)
+  wait_list_app[_sender] := app;
+
+  e = {
+    _eventname : "AddedAppEvent";
+    added_app: app;
+    onwer: _sender
+  };
+  event e
+end
+(* User transitions *)
