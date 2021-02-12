@@ -50,14 +50,19 @@ contract ZilPayExplorer
   proxy_zlp: ByStr20
 )
 
+
 (* Mutable fields *)
 field pause: Bool = False
 field price_for_ad: Uint128 = Uint128 10000000000000
+field price_for_app: Uint128 = Uint128 0
 field contract_proxy_zlp: ByStr20 = proxy_zlp
 field wait_list_app: Map ByStr20 App = Emp ByStr20 App
 field app_list: Map ByStr20 App = Emp ByStr20 App
+field ad_list: Map ByStr20 String = Emp ByStr20 String
+field wait_ad_list: Map ByStr20 String = Emp ByStr20 String
 field validator_list: Map ByStr20 Dummy = let emp_map = Emp ByStr20 Dummy in
   builtin put emp_map contract_owner verdad 
+
 
 (* Emit Errors *)
 procedure ThrowError(err : Error)
@@ -78,6 +83,17 @@ end
 
 procedure IsExistsApp(app_owner: ByStr20)
   is_app <- exists wait_list_app[app_owner];
+
+  match is_app with
+  | False =>
+    err = CodeDoesNotExists;
+    ThrowError err
+  | True =>
+  end
+end
+
+procedure IsExistsAD(app_owner: ByStr20)
+  is_app <- exists wait_ad_list[app_owner];
 
   match is_app with
   | False =>
@@ -109,19 +125,25 @@ procedure IsContractOwner()
 end
 
 procedure AcceptZLP(amount: Uint128, from: ByStr20)
-  proxy_zlp_address <- contract_proxy_zlp;
+  is_zero = builtin eq zero128 amount;
 
-  call_accept_zlp = {
-    _tag: "AcceptZLP";
-    _recipient: proxy_zlp_address;
-    _amount: Uint128 0;
-    from: from;
-    amount: amount
-  };
+  match is_zero with
+  | False =>
+    proxy_zlp_address <- contract_proxy_zlp;
 
-  msgs = one_msg call_accept_zlp;
+    call_accept_zlp = {
+      _tag: "AcceptZLP";
+      _recipient: proxy_zlp_address;
+      _amount: Uint128 0;
+      from: from;
+      amount: amount
+    };
 
-  send msgs
+    msgs = one_msg call_accept_zlp;
+
+    send msgs
+  | True =>
+  end
 end
 
 
@@ -155,6 +177,21 @@ transition ConfigureADPrice(new_price: Uint128)
 
   e = {
     _eventname : "ConfiguredAdPriceEvent";
+    old_price: old_price;
+    new_price: new_price
+  };
+  event e
+end
+
+transition ConfigureAppPrice(new_price: Uint128)
+  IsContractOwner;
+
+  old_price <- price_for_app;
+
+  price_for_app := new_price;
+
+  e = {
+    _eventname : "ConfiguredAppPriceEvent";
     old_price: old_price;
     new_price: new_price
   };
@@ -227,16 +264,31 @@ transition ValidationAppReject(app_owner: ByStr20)
   IsValidator _sender;
   IsExistsApp app_owner;
 
-  some_rejected_app <- wait_list_app[app_owner];
+  delete wait_list_app[app_owner];
 
-  match some_rejected_app with
-  | Some rejected_app =>
-    delete wait_list_app[app_owner];
+  e = {
+    _eventname : "ValidationAppRejectEvent";
+    app_owner: app_owner
+  };
+  event e
+end
+
+transition ValidationADSuccess(ad_owner: ByStr20)
+  IsValidator _sender;
+  IsExistsAD ad_owner;
+
+  some_confirmed_ad <- wait_ad_list[ad_owner];
+
+  match some_confirmed_ad with
+  | Some confirmed_ad =>
+    delete wait_ad_list[ad_owner];
+
+    ad_list[ad_owner] := confirmed_ad;
 
     e = {
-      _eventname : "ValidationAppRejectEvent";
-      app: rejected_app;
-      app_owner: app_owner
+      _eventname : "ValidationADSuccessEvent";
+      new_banner: confirmed_ad;
+      ad_owner: ad_owner
     };
     event e
   | None =>
@@ -244,15 +296,47 @@ transition ValidationAppReject(app_owner: ByStr20)
     ThrowError err
   end
 end
+
+transition ValidationADReject(app_owner: ByStr20)
+  IsValidator _sender;
+  IsExistsAD app_owner;
+
+  delete wait_ad_list[app_owner];
+
+  e = {
+    _eventname : "ValidationADRejectEvent";
+    app_owner: app_owner
+  };
+  event e
+end
 (* Validator transitions *)
 
 (* User transitions *)
 transition AddApp(app: App)
+  price <- price_for_app;
+
+  AcceptZLP price _sender;
+
   wait_list_app[_sender] := app;
 
   e = {
     _eventname : "AddedAppEvent";
     added_app: app;
+    onwer: _sender
+  };
+  event e
+end
+
+transition AddAD(url: String)
+  price <- price_for_ad;
+
+  AcceptZLP price _sender;
+
+  wait_ad_list[_sender] := url;
+
+  e = {
+    _eventname : "AddedADEvent";
+    banner_url: url;
     onwer: _sender
   };
   event e
