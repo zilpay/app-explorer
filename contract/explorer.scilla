@@ -15,29 +15,35 @@ let one_msg =
     let nil_msg = Nil {Message} in
     Cons {Message} msg nil_msg
 
-(* Custom ADT storing - Title ipfs_description, url, ipfs_image, ipfs_icon *)
+(* Custom ADT storing - Title, ipfs_description, url, ipfs_image, ipfs_icon *)
 type App =
 | App of String String String String String
+
+(* Custom ADT storing - end_block_number, owner_of_app, ipfs_banner_url *)
+type AD =
+| AD of BNum ByStr20 String
 
 (* Error events *)
 type Error =
   | CodeIsNotZLPContract
   | CodeNotContractOwner
-  | CodePauseNotPause
+  | CodeOnPause
   | CodeNotValidator
   | CodeDoesNotExists
   | CodeNotFound
+  | CodeInsufficientZLPAmount
 
 let make_error =
   fun (result : Error) =>
     let result_code =
       match result with
-      | CodeIsNotZLPContract => Int32 -1
-      | CodeNotContractOwner => Int32 -2
-      | CodePauseNotPause    => Int32 -3
-      | CodeNotValidator     => Int32 -4
-      | CodeDoesNotExists    => Int32 -5
-      | CodeNotFound         => Int32 -6
+      | CodeIsNotZLPContract      => Int32 -1
+      | CodeNotContractOwner      => Int32 -2
+      | CodeOnPause               => Int32 -3
+      | CodeNotValidator          => Int32 -4
+      | CodeDoesNotExists         => Int32 -5
+      | CodeNotFound              => Int32 -6
+      | CodeInsufficientZLPAmount => Int32 -7
       end
     in
     { _exception : "Error"; code : result_code }
@@ -53,13 +59,18 @@ contract ZilPayExplorer
 
 (* Mutable fields *)
 field pause: Bool = False
-field price_for_ad: Uint128 = Uint128 10000000000000
+
+field min_price_for_ad: Uint128 = Uint128 10000000000000
 field price_for_app: Uint128 = Uint128 0
+
 field contract_proxy_zlp: ByStr20 = proxy_zlp
+
 field wait_list_app: Map ByStr20 App = Emp ByStr20 App
 field app_list: Map ByStr20 App = Emp ByStr20 App
-field ad_list: Map ByStr20 String = Emp ByStr20 String
-field wait_ad_list: Map ByStr20 String = Emp ByStr20 String
+
+field ad_list: Map ByStr20 AD = Emp ByStr20 AD
+field wait_ad_list: Map ByStr20 AD = Emp ByStr20 AD
+
 field validator_list: Map ByStr20 Dummy = let emp_map = Emp ByStr20 Dummy in
   builtin put emp_map contract_owner verdad 
 
@@ -103,12 +114,25 @@ procedure IsExistsAD(app_owner: ByStr20)
   end
 end
 
+procedure CheckPriceForAD(amount: Uint128)
+  price <- min_price_for_ad;
+
+  is_lt = builtin lt amount price;
+
+  match is_lt with
+  | True =>
+    err = CodeInsufficientZLPAmount;
+    ThrowError err
+  | False =>
+  end
+end
+
 procedure CheckPause()
   curent_pause <- pause;
 
   match curent_pause with
   | True =>
-    err = CodePauseNotPause;
+    err = CodeOnPause;
     ThrowError err
   | False =>
   end
@@ -171,9 +195,9 @@ end
 transition ConfigureADPrice(new_price: Uint128)
   IsContractOwner;
 
-  old_price <- price_for_ad;
+  old_price <- min_price_for_ad;
 
-  price_for_ad := new_price;
+  min_price_for_ad := new_price;
 
   e = {
     _eventname : "ConfiguredAdPriceEvent";
@@ -233,10 +257,36 @@ transition ConfigureProxyZLP(contractAddr: ByStr20)
   };
   event e
 end
+
+transition ConfigureValidator(address: ByStr20)
+  IsContractOwner;
+
+  is_validator <- exists validator_list[address];
+
+  match is_validator with
+  | True =>
+    delete validator_list[address];
+
+    e = {
+      _eventname : "RemovedValidatorEvent";
+      address: address
+    };
+    event e
+  | False =>
+    validator_list[address] := verdad;
+
+    e = {
+      _eventname : "AddedValidatorEvent";
+      address: address
+    };
+    event e
+  end
+end
 (* Admin transitions *)
 
 (* Validator transitions *)
 transition ValidationAppSuccess(app_owner: ByStr20)
+  CheckPause;
   IsValidator _sender;
   IsExistsApp app_owner;
 
@@ -261,6 +311,7 @@ transition ValidationAppSuccess(app_owner: ByStr20)
 end
 
 transition ValidationAppReject(app_owner: ByStr20)
+  CheckPause;
   IsValidator _sender;
   IsExistsApp app_owner;
 
@@ -274,6 +325,7 @@ transition ValidationAppReject(app_owner: ByStr20)
 end
 
 transition ValidationADSuccess(ad_owner: ByStr20)
+  CheckPause;
   IsValidator _sender;
   IsExistsAD ad_owner;
 
@@ -298,6 +350,7 @@ transition ValidationADSuccess(ad_owner: ByStr20)
 end
 
 transition ValidationADReject(app_owner: ByStr20)
+  CheckPause;
   IsValidator _sender;
   IsExistsAD app_owner;
 
@@ -313,6 +366,8 @@ end
 
 (* User transitions *)
 transition AddApp(app: App)
+  CheckPause;
+
   price <- price_for_app;
 
   AcceptZLP price _sender;
@@ -327,16 +382,21 @@ transition AddApp(app: App)
   event e
 end
 
-transition AddAD(url: String)
-  price <- price_for_ad;
+transition AddAD(amountZLP: Uint128, ad: AD)
+  CheckPause;
+  CheckPriceForAD amountZLP;
+  AcceptZLP amountZLP _sender;
 
-  AcceptZLP price _sender;
+  match ad with
+  | AD end_block_number owner_of_app ipfs_banner_url =>
+    IsExistsApp owner_of_app
+  end;
 
-  wait_ad_list[_sender] := url;
+  wait_ad_list[_sender] := ad;
 
   e = {
     _eventname : "AddedADEvent";
-    banner_url: url;
+    ad: ad;
     onwer: _sender
   };
   event e
