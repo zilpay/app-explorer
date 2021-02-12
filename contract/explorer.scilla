@@ -21,7 +21,7 @@ type App =
 
 (* Custom ADT storing - end_block_number, owner_of_app, ipfs_banner_url *)
 type AD =
-| AD of BNum ByStr20 String
+| AD of Uint128 ByStr20 String
 
 (* Error events *)
 type Error =
@@ -62,6 +62,7 @@ field pause: Bool = False
 
 field min_price_for_ad: Uint128 = Uint128 10000000000000
 field price_for_app: Uint128 = Uint128 0
+field block_decimal: Uint128 = Uint128 2000000000000000000
 
 field contract_proxy_zlp: ByStr20 = proxy_zlp
 
@@ -93,7 +94,7 @@ procedure IsValidator(address: ByStr20)
 end
 
 procedure IsExistsApp(app_owner: ByStr20)
-  is_app <- exists wait_list_app[app_owner];
+  is_app <- exists app_list[app_owner];
 
   match is_app with
   | False =>
@@ -188,6 +189,18 @@ transition ConfigurePause()
   e = {
     _eventname : "ContractPauseEvent";
     pause: new_pause
+  };
+  event e
+end
+
+transition ConfigureBlockDecimal(value: Uint128)
+  IsContractOwner;
+
+  block_decimal := value;
+
+  e = {
+    _eventname : "ConfiguredBlockDecimalEvent";
+    new_block_decimal: value
   };
   event e
 end
@@ -365,38 +378,42 @@ end
 (* Validator transitions *)
 
 (* User transitions *)
-transition AddApp(app: App)
+transition AddApp(title: String, des: String, url: String, image: String, icon: String)
   CheckPause;
 
   price <- price_for_app;
 
   AcceptZLP price _sender;
 
-  wait_list_app[_sender] := app;
+  new_app = App title des url image icon;
+
+  wait_list_app[_sender] := new_app;
 
   e = {
     _eventname : "AddedAppEvent";
-    added_app: app;
+    added_app: new_app;
     onwer: _sender
   };
   event e
 end
 
-transition AddAD(amountZLP: Uint128, ad: AD)
+transition AddAD(amountZLP: Uint128, app_owner: ByStr20, url: String)
   CheckPause;
+  IsExistsApp app_owner;
   CheckPriceForAD amountZLP;
   AcceptZLP amountZLP _sender;
+  
+  decimal <- block_decimal;
+  
+  block_number = builtin div amountZLP decimal;
 
-  match ad with
-  | AD end_block_number owner_of_app ipfs_banner_url =>
-    IsExistsApp owner_of_app
-  end;
+  new_ad = AD block_number app_owner url;
 
-  wait_ad_list[_sender] := ad;
+  wait_ad_list[_sender] := new_ad;
 
   e = {
     _eventname : "AddedADEvent";
-    ad: ad;
+    ad: new_ad;
     onwer: _sender
   };
   event e
