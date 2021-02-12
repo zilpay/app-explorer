@@ -2,8 +2,13 @@ scilla_version 0
 
 library ZilPayExplorer
 
+(* User-defined ADTs *)
+type Dummy =
+| Dummy
+
 (* Global variables *)
 let zero128 = Uint128 0
+let verdad = Dummy
 
 let one_msg =
   fun (msg: Message) =>
@@ -16,19 +21,29 @@ let two_msgs =
     let msgs_tmp = one_msg msg2 in
     Cons {Message} msg1 msgs_tmp
 
+(* Custom ADT storing - Title ipfs_description, url, ipfs_image, ipfs_icon *)
+type App =
+| App of String String String String String
+
 (* Error events *)
 type Error =
   | CodeIsNotZLPContract
   | CodeNotContractOwner
   | CodePauseNotPause
+  | CodeNotValidator
+  | CodeDoesNotExists
+  | CodeNotFound
 
 let make_error =
   fun (result : Error) =>
     let result_code =
       match result with
-      | CodeIsNotZLPContract      => Int32 -1
-      | CodeNotContractOwner      => Int32 -2
-      | CodePauseNotPause         => Int32 -3
+      | CodeIsNotZLPContract => Int32 -1
+      | CodeNotContractOwner => Int32 -2
+      | CodePauseNotPause    => Int32 -3
+      | CodeNotValidator     => Int32 -4
+      | CodeDoesNotExists    => Int32 -5
+      | CodeNotFound         => Int32 -6
       end
     in
     { _exception : "Error"; code : result_code }
@@ -44,6 +59,10 @@ contract ZilPayExplorer
 (* Mutable fields *)
 field pause: Bool = False
 field contract_proxy_zlp: ByStr20 = proxy_zlp
+field wait_list_app: Map ByStr20 App = Emp ByStr20 App
+field app_list: Map ByStr20 App = Emp ByStr20 App
+field validator_list: Map ByStr20 Dummy = let emp_map = Emp ByStr20 Dummy in
+  builtin put emp_map contract_owner verdad 
 
 (* Emit Errors *)
 procedure ThrowError(err : Error)
@@ -51,7 +70,29 @@ procedure ThrowError(err : Error)
   throw e
 end
 
-procedure CheckPause(expected: Uint32)
+procedure IsValidator(address: ByStr20)
+  is_validator <- exists validator_list[address];
+
+  match is_validator with
+  | True =>
+  | False =>
+    err = CodeNotValidator;
+    ThrowError err
+  end
+end
+
+procedure IsExistsApp(app_owner: ByStr20)
+  is_app <- exists wait_list_app[app_owner];
+
+  match is_app with
+  | False =>
+    err = CodeDoesNotExists;
+    ThrowError err
+  | True =>
+  end
+end
+
+procedure CheckPause()
   curent_pause <- pause;
 
   match curent_pause with
@@ -105,4 +146,55 @@ transition ConfigureProxyZLP(contractAddr: ByStr20)
     old_proxy_zlp: old_proxy_zlp
   };
   event e
+end
+
+transition AddApp(app: App)
+  (* need add ZLP logic *)
+  wait_list_app[_sender] := app
+end
+
+transition ValidationAppSuccess(app_owner: ByStr20)
+  IsValidator _sender;
+  IsExistsApp app_owner;
+
+  some_confirmed_app <- wait_list_app[app_owner];
+
+  match some_confirmed_app with
+  | Some confirmed_app =>
+    delete wait_list_app[app_owner];
+
+    app_list[app_owner] := confirmed_app;
+
+    e = {
+      _eventname : "ValidationAppSuccessEvent";
+      app: confirmed_app;
+      app_owner: app_owner
+    };
+    event e
+  | None =>
+    err = CodeNotFound;
+    ThrowError err
+  end
+end
+
+transition ValidationAppReject(app_owner: ByStr20)
+  IsValidator _sender;
+  IsExistsApp app_owner;
+
+  some_confirmed_app <- wait_list_app[app_owner];
+
+  match some_confirmed_app with
+  | Some confirmed_app =>
+    delete wait_list_app[app_owner];
+
+    e = {
+      _eventname : "ValidationAppReject";
+      app: confirmed_app;
+      app_owner: app_owner
+    };
+    event e
+  | None =>
+    err = CodeNotFound;
+    ThrowError err
+  end
 end
