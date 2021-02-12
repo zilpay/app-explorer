@@ -1,0 +1,108 @@
+scilla_version 0
+
+library ZilPayExplorer
+
+(* Global variables *)
+let zero128 = Uint128 0
+
+let one_msg =
+  fun (msg: Message) =>
+    let nil_msg = Nil {Message} in
+    Cons {Message} msg nil_msg
+
+let two_msgs =
+  fun (msg1 : Message) =>
+  fun (msg2 : Message) =>
+    let msgs_tmp = one_msg msg2 in
+    Cons {Message} msg1 msgs_tmp
+
+(* Error events *)
+type Error =
+  | CodeIsNotZLPContract
+  | CodeNotContractOwner
+  | CodePauseNotPause
+
+let make_error =
+  fun (result : Error) =>
+    let result_code =
+      match result with
+      | CodeIsNotZLPContract      => Int32 -1
+      | CodeNotContractOwner      => Int32 -2
+      | CodePauseNotPause         => Int32 -3
+      end
+    in
+    { _exception : "Error"; code : result_code }
+
+contract ZilPayExplorer
+
+(*  Parameters *)
+(
+  contract_owner: ByStr20,
+  proxy_zlp: ByStr20
+)
+
+(* Mutable fields *)
+field pause: Bool = False
+field contract_proxy_zlp: ByStr20 = proxy_zlp
+
+(* Emit Errors *)
+procedure ThrowError(err : Error)
+  e = make_error err;
+  throw e
+end
+
+procedure CheckPause(expected: Uint32)
+  curent_pause <- pause;
+
+  match curent_pause with
+  | True =>
+    err = CodePauseNotPause;
+    ThrowError err
+  | False =>
+  end
+end
+
+procedure IsContractOwner()
+  is_contract_owner = builtin eq contract_owner _sender;
+  match is_contract_owner with
+  | True => 
+  | False =>
+    err = CodeNotContractOwner;
+    ThrowError err
+  end
+end
+
+transition ConfigurePause()
+  IsContractOwner;
+  curent_pause <- pause;
+
+  new_pause = match curent_pause with
+  | True =>
+    False
+  | False =>
+    True
+  end;
+
+  pause := new_pause;
+
+  e = {
+    _eventname : "ContractPauseEvent";
+    pause: new_pause
+  };
+  event e
+end
+
+transition ConfigureProxyZLP(contractAddr: ByStr20)
+  IsContractOwner;
+
+  old_proxy_zlp <- contract_proxy_zlp;
+
+  contract_proxy_zlp := contractAddr;
+
+  e = {
+    _eventname : "TransferZLPFrom";
+    new_proxy_zlp: contractAddr;
+    old_proxy_zlp: old_proxy_zlp
+  };
+  event e
+end
