@@ -32,6 +32,7 @@ type Error =
   | CodeDoesNotExists
   | CodeNotFound
   | CodeInsufficientZLPAmount
+  | CodeAlreadyExists
 
 let make_error =
   fun (result : Error) =>
@@ -44,6 +45,7 @@ let make_error =
       | CodeDoesNotExists         => Int32 -5
       | CodeNotFound              => Int32 -6
       | CodeInsufficientZLPAmount => Int32 -7
+      | CodeAlreadyExists         => Int32 -8
       end
     in
     { _exception : "Error"; code : result_code }
@@ -95,6 +97,30 @@ end
 
 procedure IsExistsApp(app_owner: ByStr20)
   is_app <- exists app_list[app_owner];
+
+  match is_app with
+  | False =>
+    err = CodeDoesNotExists;
+    ThrowError err
+  | True =>
+  end
+end
+
+
+procedure IsAlreadyExistsApp(app_owner: ByStr20)
+  is_app <- exists app_list[app_owner];
+
+  match is_app with
+  | False =>
+  | True =>
+    err = CodeAlreadyExists;
+    ThrowError err
+  end
+end
+
+
+procedure IsWaitExistsApp(app_owner: ByStr20)
+  is_app <- exists wait_list_app[app_owner];
 
   match is_app with
   | False =>
@@ -238,11 +264,11 @@ end
 transition RemoveApp(app_owner: ByStr20)
   IsContractOwner;
 
-  some_app <- wait_list_app[app_owner];
+  some_app <- app_list[app_owner];
 
   match some_app with
   | Some app =>
-    delete wait_list_app[app_owner];
+    delete app_list[app_owner];
 
     e = {
       _eventname : "AppRemoveEvent";
@@ -301,7 +327,7 @@ end
 transition ValidationAppSuccess(app_owner: ByStr20)
   CheckPause;
   IsValidator _sender;
-  IsExistsApp app_owner;
+  IsWaitExistsApp app_owner;
 
   some_confirmed_app <- wait_list_app[app_owner];
 
@@ -326,7 +352,7 @@ end
 transition ValidationAppReject(app_owner: ByStr20)
   CheckPause;
   IsValidator _sender;
-  IsExistsApp app_owner;
+  IsWaitExistsApp app_owner;
 
   delete wait_list_app[app_owner];
 
@@ -380,6 +406,7 @@ end
 (* User transitions *)
 transition AddApp(title: String, des: String, url: String, image: String, icon: String)
   CheckPause;
+  IsAlreadyExistsApp _sender;
 
   price <- price_for_app;
 
