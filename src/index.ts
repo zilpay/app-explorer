@@ -2,7 +2,7 @@ import * as path from 'path';
 import { ConnectionOptions, createConnection } from 'typeorm';
 import { app } from './server';
 
-import 'src/pinata';
+import './pinata';
 
 const PORT = 3000;
 const root = path.resolve(__dirname, "..")
