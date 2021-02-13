@@ -62,7 +62,7 @@ contract ZilPayExplorer
 (* Mutable fields *)
 field pause: Bool = False
 
-field min_price_for_ad: Uint128 = Uint128 10000000000000
+field min_price_for_ad: Uint128 = Uint128 2000000000000000000
 field price_for_app: Uint128 = Uint128 0
 field block_decimal: Uint128 = Uint128 2000000000000000000
 
@@ -106,7 +106,6 @@ procedure IsExistsApp(app_owner: ByStr20)
   end
 end
 
-
 procedure IsAlreadyExistsApp(app_owner: ByStr20)
   is_app <- exists app_list[app_owner];
 
@@ -117,7 +116,6 @@ procedure IsAlreadyExistsApp(app_owner: ByStr20)
     ThrowError err
   end
 end
-
 
 procedure IsWaitExistsApp(app_owner: ByStr20)
   is_app <- exists wait_list_app[app_owner];
