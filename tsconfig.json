@@ -24,12 +24,10 @@
       "scripthost"
     ]
   },
+  "paths": {
+    "src/*": ["src/*"],
+  },
   "types": ["node"],
-  "include": [
-    "lib/**/*.ts",
-    "src/**/*.ts",
-    "index.ts"
-  ],
   "exclude": [
     "node_modules"
   ]

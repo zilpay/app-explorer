@@ -19,6 +19,7 @@
   "homepage": "https://github.com/zilpay/app-explorer#readme",
   "devDependencies": {
     "@types/express": "^4.17.11",
+    "@types/multer": "^1.4.5",
     "@types/node": "^14.14.25",
     "dotenv": "^8.2.0",
     "sqlite3": "^5.0.1",
@@ -28,7 +29,9 @@
   },
   "dependencies": {
     "@pinata/sdk": "^1.1.11",
+    "body-parser": "^1.19.0",
     "express": "^4.17.1",
+    "multer": "^1.4.2",
     "path": "^0.12.7",
     "typeorm": "^0.2.31"
   }
