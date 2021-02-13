@@ -12,3 +12,5 @@ node_modules
 *.sql
 .env
 *.sqlite
+
+uploads

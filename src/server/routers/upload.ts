@@ -1,9 +1,10 @@
 import multer from 'multer';
 import express from 'express';
+import path from 'path';
 
 export const uploadRouter = express();
 const upload = multer({
-  dest: __dirname + '/uploads/images'
+  dest: path.resolve(__dirname, '../', '../', '../', 'uploads')
 });
 
 uploadRouter.post('/upload/poster', upload.single('poster'), (_req, res) => {
