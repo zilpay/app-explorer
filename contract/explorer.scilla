@@ -280,6 +280,27 @@ transition RemoveApp(app_owner: ByStr20)
   end
 end
 
+transition RemoveAD(app_owner: ByStr20)
+  IsContractOwner;
+
+  some_ad <- ad_list[app_owner];
+
+  match some_ad with
+  | Some ad =>
+    delete ad_list[app_owner];
+
+    e = {
+      _eventname : "ADRemoveEvent";
+      removed_ad: ad;
+      app_owner: app_owner
+    };
+    event e
+  | None =>
+    err = CodeNotFound;
+    ThrowError err
+  end
+end
+
 transition ConfigureProxyZLP(contractAddr: ByStr20)
   IsContractOwner;
 
