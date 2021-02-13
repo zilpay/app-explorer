@@ -8,6 +8,8 @@ type Dummy =
 
 (* Global variables *)
 let zero128 = Uint128 0
+let zero256 = Uint256 0
+let zerobn = BNum 0
 let verdad = Dummy
 
 let one_msg =
@@ -15,13 +17,38 @@ let one_msg =
     let nil_msg = Nil {Message} in
     Cons {Message} msg nil_msg
 
+let option_value =
+  tfun 'A =>
+  fun (default: 'A) =>
+  fun (opt_val: Option 'A) =>
+    match opt_val with
+    | Some v => v
+    | None => default
+    end
+
+let option_uint256 = @option_value Uint256
+
+let bn_to_uint =
+  fun (block_number: BNum) =>
+  let int_block = builtin bsub block_number zerobn in
+  let some_int_block = builtin to_uint256 int_block in
+    option_uint256 zero256 some_int_block
+  
+let zlp_to_blocks =
+    fun (amount: Uint128) =>
+    fun (block_decimal: Uint256) =>
+    let some_amount_256 = builtin to_uint256 amount in
+    let amount_256 = option_uint256 zero256 some_amount_256 in
+      builtin div amount_256 block_decimal
+
+
 (* Custom ADT storing - Title, ipfs_description, url, ipfs_image, ipfs_icon *)
 type App =
 | App of String String String String String
 
 (* Custom ADT storing - end_block_number, owner_of_app, ipfs_banner_url *)
 type AD =
-| AD of Uint128 ByStr20 String
+| AD of Uint256 ByStr20 String
 
 (* Error events *)
 type Error =
@@ -64,7 +91,7 @@ field pause: Bool = False
 
 field min_price_for_ad: Uint128 = Uint128 2000000000000000000
 field price_for_app: Uint128 = Uint128 0
-field block_decimal: Uint128 = Uint128 2000000000000000000
+field block_decimal: Uint256 = Uint256 2000000000000000000
 
 field contract_proxy_zlp: ByStr20 = proxy_zlp
 
@@ -217,7 +244,7 @@ transition ConfigurePause()
   event e
 end
 
-transition ConfigureBlockDecimal(value: Uint128)
+transition ConfigureBlockDecimal(value: Uint256)
   IsContractOwner;
 
   block_decimal := value;
@@ -388,19 +415,28 @@ transition ValidationADSuccess(ad_owner: ByStr20)
   IsExistsAD ad_owner;
 
   some_confirmed_ad <- wait_ad_list[ad_owner];
+  current_block <- & BLOCKNUMBER;
 
   match some_confirmed_ad with
   | Some confirmed_ad =>
-    delete wait_ad_list[ad_owner];
+    match confirmed_ad with
+    | AD block owner url =>
+      delete wait_ad_list[ad_owner];
 
-    ad_list[ad_owner] := confirmed_ad;
+      block_256 = bn_to_uint current_block;
+      end_block = builtin add block_256 block;
+      new_add = AD end_block owner url;
 
-    e = {
-      _eventname : "ValidationADSuccessEvent";
-      new_banner: confirmed_ad;
-      ad_owner: ad_owner
-    };
-    event e
+      ad_list[ad_owner] := new_add;
+
+      e = {
+        _eventname : "ValidationADSuccessEvent";
+        new_banner: new_add;
+        current_block: current_block;
+        ad_owner: ad_owner
+      };
+      event e
+    end
   | None =>
     err = CodeNotFound;
     ThrowError err
@@ -450,16 +486,16 @@ transition AddAD(amountZLP: Uint128, app_owner: ByStr20, url: String)
   AcceptZLP amountZLP _sender;
   
   decimal <- block_decimal;
-  
-  block_number = builtin div amountZLP decimal;
 
-  new_ad = AD block_number app_owner url;
+  zlp_to_blocks = zlp_to_blocks amountZLP decimal;
+  new_ad = AD zlp_to_blocks app_owner url;
 
   wait_ad_list[_sender] := new_ad;
 
   e = {
     _eventname : "AddedADEvent";
     ad: new_ad;
+    amount_of_blocks: zlp_to_blocks;
     onwer: _sender
   };
   event e
