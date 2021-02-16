@@ -33,7 +33,7 @@ let bn_to_uint =
   let int_block = builtin bsub block_number zerobn in
   let some_int_block = builtin to_uint256 int_block in
     option_uint256 zero256 some_int_block
-  
+
 let zlp_to_blocks =
     fun (amount: Uint128) =>
     fun (block_decimal: Uint256) =>
@@ -42,9 +42,9 @@ let zlp_to_blocks =
       builtin div amount_256 block_decimal
 
 
-(* Custom ADT storing - Title, ipfs_description, url, ipfs_image, ipfs_icon *)
+(* Custom ADT storing - Title, ipfs_description, url, ipfs_image, ipfs_icon, category *)
 type App =
-| App of String String String String String
+| App of String String String String String Uint32
 
 (* Custom ADT storing - end_block_number, owner_of_app, ipfs_banner_url *)
 type AD =
@@ -459,7 +459,7 @@ end
 (* Validator transitions *)
 
 (* User transitions *)
-transition AddApp(title: String, des: String, url: String, image: String, icon: String)
+transition AddApp(title: String, des: String, url: String, image: String, icon: String, category: Uint32)
   CheckPause;
   IsAlreadyExistsApp _sender;
 
@@ -467,7 +467,7 @@ transition AddApp(title: String, des: String, url: String, image: String, icon: 
 
   AcceptZLP price _sender;
 
-  new_app = App title des url image icon;
+  new_app = App title des url image icon category;
 
   wait_list_app[_sender] := new_app;
 
