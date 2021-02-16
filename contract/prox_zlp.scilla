@@ -1,0 +1,161 @@
+scilla_version 0
+
+library ProxyZLP
+
+(* User-defined ADTs *)
+type Operation =
+| Add
+| Sub
+
+type Dummy =
+| Dummy
+
+(* Global variables *)
+let zero = Uint128 0
+let verdad = Dummy
+
+(* Library functions *)
+let get_bal =
+  fun (some_bal: Option Uint128) =>
+    match some_bal with
+    | Some bal => bal
+    | None => zero
+    end
+
+let one_msg =
+  fun (msg: Message) =>
+    let nil_msg = Nil {Message} in
+    Cons {Message} msg nil_msg
+
+let two_msgs =
+  fun (msg1 : Message) =>
+  fun (msg2 : Message) =>
+    let msgs_tmp = one_msg msg2 in
+    Cons {Message} msg1 msgs_tmp
+
+(* Error events *)
+type Error =
+  | CodeInsufficientZLPAmount
+  | CodeIsNotZLPContract
+  | CodeIsNotTrustedContract
+  | CodeNotContractOwner
+  | CodePauseNotPause
+  | CodeIsNotOwnerOrOperator
+
+let make_error =
+  fun (result : Error) =>
+    let result_code =
+      match result with
+      | CodeInsufficientZLPAmount => Int32 -1
+      | CodeIsNotZLPContract      => Int32 -2
+      | CodeIsNotTrustedContract  => Int32 -3
+      | CodeNotContractOwner      => Int32 -4
+      | CodePauseNotPause         => Int32 -5
+      | CodeIsNotOwnerOrOperator  => Int32 -6
+      end
+    in
+    { _exception : "Error"; code : result_code }
+
+contract ProxyZLP
+
+(*  Parameters *)
+(
+  contract_owner: ByStr20,
+  zlp: ByStr20
+)
+
+(* Mutable fields *)
+field trusted_contracts: Map ByStr20 Dummy = Emp ByStr20 Dummy
+
+(* Emit Errors *)
+procedure ThrowError(err : Error)
+  e = make_error err;
+  throw e
+end
+
+procedure IsContractOwner()
+  is_contract_owner = builtin eq contract_owner _sender;
+  match is_contract_owner with
+  | True => 
+  | False =>
+    err = CodeNotContractOwner;
+    ThrowError err
+  end
+end
+
+procedure IsZLPContract()
+  is_zlp_sender = builtin eq zlp _sender;
+  match is_zlp_sender with
+  | True =>
+  | False =>
+    err = CodeIsNotZLPContract;
+    ThrowError err
+  end
+end
+
+procedure IsTrustContract()
+  is_trusted_contract <- exists trusted_contracts[_sender];
+  match is_trusted_contract with
+  | True =>
+  | False =>
+    err = CodeIsNotTrustedContract;
+    ThrowError err
+  end
+end
+
+transition Burn(burn_account: ByStr20, amount: Uint128)
+  IsTrustContract;
+  msg_burn = {_tag: "Burn"; _recipient: zlp; _amount: zero;
+                      burn_account: burn_account; amount: amount};
+  msgs = one_msg msg_burn;
+  send msgs
+end
+
+transition Mint(recipient: ByStr20, amount: Uint128)
+  IsTrustContract;
+  msg_burn = {_tag: "Mint"; _recipient: zlp; _amount: zero;
+                      recipient: recipient; amount: amount};
+  msgs = one_msg msg_burn;
+  send msgs
+end
+
+transition AcceptZLP(from: ByStr20, amount: Uint128)
+  IsTrustContract;
+  msg_burn = {_tag: "Burn"; _recipient: zlp; _amount: zero;
+                      burn_account: from; amount: amount};
+  msgs = one_msg msg_burn;
+  send msgs
+end
+
+transition TransferZLPFrom(from: ByStr20, to: ByStr20, amount: Uint128, commission: Uint128)
+  IsTrustContract;
+  amount_and_commission = builtin add amount commission;
+  e = {_eventname : "TransferZLPFrom"; initiator: _sender; from: from; to: to; amount: amount; commission: commission};
+  event e;
+  msg_burn = {_tag: "Burn"; _recipient: zlp; _amount: zero;
+                      burn_account: from; amount: amount_and_commission};
+  msg_mint = {_tag: "Mint"; _recipient: zlp; _amount: zero;
+                      recipient: to; amount: amount};
+  msgs = two_msgs msg_mint msg_burn;
+  send msgs
+end
+
+transition ConfigureTrustedContracts(contract_address: ByStr20)
+  IsContractOwner;
+  some_trusted_contract <- trusted_contracts[contract_address];
+  match some_trusted_contract with
+  | Some Dummy =>
+    delete trusted_contracts[contract_address]
+  | None =>
+    trusted_contracts[contract_address] := verdad
+  end
+end
+
+transition MintSuccessCallBack(minter: ByStr20, recipient: ByStr20, amount: Uint128)
+end
+
+transition RecipientAcceptMint(minter: ByStr20, recipient: ByStr20, amount: Uint128)
+end
+
+transition BurnSuccessCallBack(burner: ByStr20, burn_account: ByStr20, amount: Uint128)
+end
