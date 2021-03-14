@@ -15,14 +15,27 @@ export class App {
   @Column()
   name!: string;
 
+  @Column()
+  owner!: string;
+
+  @Column()
+  description!: string;
+
   @Column({ unique: true })
   domain!: string;
 
-  @OneToMany((type) => IPFSHash, (ipfs) => ipfs.id)
+  @OneToMany(() => IPFSHash, (ipfs) => ipfs.id)
   ipfs!: IPFSHash[];
 
-  constructor(name: string, domain: string) {
+  constructor(
+    owner: string,
+    name: string,
+    description: string,
+    domain: string
+  ) {
     this.name = name;
     this.domain = domain;
+    this.owner = owner;
+    this.description = description;
   }
 }
