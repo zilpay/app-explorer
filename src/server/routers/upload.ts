@@ -61,8 +61,9 @@ uploadRouter.post('/upload/img',
   upload.single('img'),
   uploadMiddleware,
   async (req: Request, res: Response) => {
+  const connection = getConnection();
+
   try {
-    const connection = getConnection();
     const readableStreamForFile = fs.createReadStream(req.file.path);
     const hash = await pinImage(readableStreamForFile);
     const ipfs = new IPFSHash(hash);

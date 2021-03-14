@@ -15,7 +15,9 @@ export class IPFSHash {
   @Column({ unique: true })
   hash!: string;
 
-  @ManyToOne((type) => App, (app) => app.id)
+  @ManyToOne(() => App, (app) => app.id, {
+    nullable: false
+  })
   appId!: App;
 
   constructor(hash: string) {

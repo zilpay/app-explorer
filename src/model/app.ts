@@ -24,7 +24,9 @@ export class App {
   @Column({ unique: true })
   domain!: string;
 
-  @OneToMany(() => IPFSHash, (ipfs) => ipfs.id)
+  @OneToMany(() => IPFSHash, (ipfs) => ipfs.id, {
+    nullable: false
+  })
   ipfs!: IPFSHash[];
 
   constructor(
