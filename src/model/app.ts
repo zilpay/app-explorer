@@ -21,8 +21,15 @@ export class App {
   @Column()
   description!: string;
 
-  @Column({ unique: true })
+  @Column({
+    unique: true
+  })
   domain!: string;
+
+  @Column({
+    default: false
+  })
+  available!: boolean;
 
   @OneToMany(() => IPFSHash, (ipfs) => ipfs.id, {
     nullable: false
