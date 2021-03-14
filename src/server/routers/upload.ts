@@ -10,7 +10,18 @@ export const uploadRouter = express();
 
 const MAX_SIZE = 52428800;
 const upload = multer({
-  dest: path.resolve(__dirname, '../', '../', '../', 'uploads')
+  dest: path.resolve(__dirname, '../', '../', '../', 'uploads'),
+  limits: {
+    fieldSize: 1024 * 512,
+    fieldNameSize: 200
+  },
+  fileFilter: (req, file, cb) => {
+    if (file.mimetype === 'image/png') {
+      cb(null, true);
+    } else {
+      cb(new multer.MulterError('LIMIT_UNEXPECTED_FILE', 'should be PNG'));
+    }
+  }
 });
 
 async function uploadMiddleware(req: Request, res: Response, next: NextFunction) {
@@ -46,8 +57,8 @@ async function uploadMiddleware(req: Request, res: Response, next: NextFunction)
   return next();
 }
 
-uploadRouter.post('/upload/poster',
-  upload.single('poster'),
+uploadRouter.post('/upload/img',
+  upload.single('img'),
   uploadMiddleware,
   async (req: Request, res: Response) => {
   try {
@@ -66,26 +77,4 @@ uploadRouter.post('/upload/poster',
       error: err.message
     });
   }
-});
-
-uploadRouter.post('/upload/icon',
-  upload.single('icon'),
-  uploadMiddleware,
-  async (req: Request, res: Response) => {
-    try {
-      const connection = getConnection();
-      const readableStreamForFile = fs.createReadStream(req.file.path);
-      const hash = await pinImage(readableStreamForFile);
-      const ipfs = new IPFSHash(hash);
-      const ipfsRepository = connection.getRepository(IPFSHash);
-      const svaedIPFS = await ipfsRepository.save(ipfs);
-  
-      await fs.promises.unlink(req.file.path);
-  
-      return res.status(201).json(svaedIPFS);
-    } catch (err) {
-      return res.status(422).json({
-        error: err.message
-      });
-    }
 });
