@@ -1,7 +1,6 @@
 import pinataSDK from '@pinata/sdk';
 import { Stream } from 'stream';
 
-
 const IPFS_API_KEY = process.env.IPFS_API_KEY;
 const IPFS_API_SECRET = process.env.IPFS_API_SECRET;
 const pinata = pinataSDK(IPFS_API_KEY, IPFS_API_SECRET);
@@ -13,14 +12,11 @@ pinata
     console.log('pinata authenticated:', result.authenticated);
   }).catch((err) => {
     //handle error here
-    console.log('pinata authenticated:', err);
+    console.log('pinata authenticated:', JSON.stringify(err, null, 4));
   });
 
-export async function pinImage(domain: string, image: Stream) {
+export async function pinImage(image: Stream) {
   const options = {
-    pinataMetadata: {
-        name: domain
-    },
     pinataOptions: {
         cidVersion: 0
     }

@@ -5,5 +5,6 @@ import { router } from './routers';
 
 export const app = express();
 
-app.use(bodyParser.urlencoded({ extended: false }));
+app.use(bodyParser.urlencoded());
+app.use(bodyParser.json());
 app.use(router);

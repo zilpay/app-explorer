@@ -1,15 +1,17 @@
 import * as path from 'path';
 import { ConnectionOptions, createConnection } from 'typeorm';
 import { app } from './server';
+import entities from './model';
 
 import './pinata';
 
 const PORT = 3000;
-const root = path.resolve(__dirname, "..")
+const root = path.resolve(__dirname, "..");
 const options: ConnectionOptions = {
+  entities,
   type: "sqlite",
+  synchronize: true,
   database: `${root}/database.sqlite`,
-  entities: [],
   logging: true
 };
 
