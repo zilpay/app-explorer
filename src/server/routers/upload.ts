@@ -1,8 +1,10 @@
 import multer from 'multer';
+import { getConnection } from 'typeorm';
 import express from 'express';
 import path from 'path';
 import fs from 'fs';
 import { pinImage } from '../../pinata';
+import { IPFSHash } from '../../model/ipfs';
 
 export const uploadRouter = express();
 
@@ -42,10 +44,14 @@ uploadRouter.post('/upload/poster', upload.single('poster'), async(req, res) => 
   }
 
   try {
+    const connection = getConnection();
     const readableStreamForFile = fs.createReadStream(req.file.path);
     const hash = await pinImage(readableStreamForFile);
-    
+    const ipfs = new IPFSHash(hash);
+    const ipfsRepository = connection.getRepository(IPFSHash);
+
     await fs.promises.unlink(req.file.path);
+    await ipfsRepository.save(ipfs);
 
     return res.status(201).send({
       hash

@@ -8,4 +8,8 @@ export class IPFSHash {
 
   @Column()
   hash!: string;
+
+  constructor(hash: string) {
+    this.hash = hash;
+  }
 }
