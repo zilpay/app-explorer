@@ -471,7 +471,7 @@ transition AddApp(app: App)
 
   e = {
     _eventname : "AddedAppEvent";
-    added_app: new_app;
+    added_app: app;
     onwer: _sender
   };
   event e
