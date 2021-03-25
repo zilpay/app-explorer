@@ -44,7 +44,7 @@ let zlp_to_blocks =
 
 (* Custom ADT storing - Title, ipfs_description, url, ipfs_image, ipfs_icon, category *)
 type App =
-| App of String String String String String Uint32
+| App of String String String (List String) String Uint32
 
 (* Custom ADT storing - end_block_number, owner_of_app, ipfs_banner_url *)
 type AD =
@@ -459,7 +459,7 @@ end
 (* Validator transitions *)
 
 (* User transitions *)
-transition AddApp(title: String, des: String, url: String, image: String, icon: String, category: Uint32)
+transition AddApp(app: App)
   CheckPause;
   IsAlreadyExistsApp _sender;
 
@@ -467,9 +467,7 @@ transition AddApp(title: String, des: String, url: String, image: String, icon: 
 
   AcceptZLP price _sender;
 
-  new_app = App title des url image icon category;
-
-  wait_list_app[_sender] := new_app;
+  wait_list_app[_sender] := app;
 
   e = {
     _eventname : "AddedAppEvent";

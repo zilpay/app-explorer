@@ -1,7 +1,7 @@
-import express from 'express';
+import express, { Request, Response } from 'express';
 
 export const appInfo = express();
 
-appInfo.post('/create/app', (_req, res) => {
+appInfo.post('/app/add', (req: Request, res: Response) => {
   res.status(201).send('User created');
 });
