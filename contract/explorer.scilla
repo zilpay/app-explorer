@@ -115,6 +115,55 @@ procedure IsContractOwner()
   end
 end
 
+procedure ConfigureValidator(address: ByStr20)
+  validator_contract := address;
+
+  e = {
+    _eventname : "ValidatorChangedEvent";
+    validator_contract: address
+  };
+  event e
+end
+
+procedure RemoveApp(app_owner: ByStr20)
+  some_app <- app_list[app_owner];
+
+  match some_app with
+  | Some app =>
+    delete app_list[app_owner];
+
+    e = {
+      _eventname : "AppRemoveEvent";
+      removed_app: app;
+      app_owner: app_owner
+    };
+    event e
+  | None =>
+    err = CodeNotFound;
+    ThrowError err
+  end
+end
+
+procedure RemoveAD(app_owner: ByStr20)
+  some_ad <- ad_list[app_owner];
+
+  match some_ad with
+  | Some ad =>
+    delete ad_list[app_owner];
+
+    e = {
+      _eventname : "ADRemoveEvent";
+      removed_ad: ad;
+      app_owner: app_owner
+    };
+    event e
+  | None =>
+    err = CodeNotFound;
+    ThrowError err
+  end
+end
+
+
 (* Admin transitions *)
 transition ConfigurePause()
   IsContractOwner;
@@ -136,58 +185,22 @@ transition ConfigurePause()
   event e
 end
 
-transition ConfigureValidator(address: ByStr20)
+transition ConfigureValidators(addresses: List (ByStr20))
   IsContractOwner;
 
-  validator_contract := address;
-
-  e = {
-    _eventname : "ValidatorChangedEvent";
-    validator_contract: address
-  };
-  event e
+  forall addresses ConfigureValidator
 end
 
-transition RemoveApp(app_owner: ByStr20)
+transition RemoveAppList(app_owners: List ByStr20)
   IsContractOwner;
 
-  some_app <- app_list[app_owner];
-
-  match some_app with
-  | Some app =>
-    delete app_list[app_owner];
-
-    e = {
-      _eventname : "AppRemoveEvent";
-      removed_app: app;
-      app_owner: app_owner
-    };
-    event e
-  | None =>
-    err = CodeNotFound;
-    ThrowError err
-  end
+  forall app_owners RemoveApp
 end
 
-transition RemoveAD(app_owner: ByStr20)
+transition RemoveADList(ad_owners: List ByStr20)
   IsContractOwner;
 
-  some_ad <- ad_list[app_owner];
-
-  match some_ad with
-  | Some ad =>
-    delete ad_list[app_owner];
-
-    e = {
-      _eventname : "ADRemoveEvent";
-      removed_ad: ad;
-      app_owner: app_owner
-    };
-    event e
-  | None =>
-    err = CodeNotFound;
-    ThrowError err
-  end
+  forall ad_owners RemoveAD
 end
 (* Admin transitions *)
 
