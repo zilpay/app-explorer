@@ -1,6 +1,6 @@
 scilla_version 0
 
-library ZilPayExplorer
+library ZilPayValidator
 
 (* User-defined ADTs *)
 type Dummy =
@@ -77,12 +77,12 @@ let make_error =
     in
     { _exception : "Error"; code : result_code }
 
-contract ZilPayExplorer
+contract ZilPayValidator
 
 (*  Parameters *)
 (
   contract_owner: ByStr20,
-  proxy_zlp: ByStr20
+  explorer: ByStr20
 )
 
 
@@ -92,8 +92,6 @@ field pause: Bool = False
 field min_price_for_ad: Uint128 = Uint128 2000000000000000000
 field price_for_app: Uint128 = Uint128 0
 field block_decimal: Uint256 = Uint256 2000000000000000000
-
-field contract_proxy_zlp: ByStr20 = proxy_zlp
 
 field wait_list_app: Map ByStr20 App = Emp ByStr20 App
 field app_list: Map ByStr20 App = Emp ByStr20 App

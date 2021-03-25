@@ -115,16 +115,6 @@ procedure IsContractOwner()
   end
 end
 
-procedure ConfigureValidator(address: ByStr20)
-  validator_contract := address;
-
-  e = {
-    _eventname : "ValidatorChangedEvent";
-    validator_contract: address
-  };
-  event e
-end
-
 procedure RemoveApp(app_owner: ByStr20)
   some_app <- app_list[app_owner];
 
@@ -185,10 +175,15 @@ transition ConfigurePause()
   event e
 end
 
-transition ConfigureValidators(addresses: List (ByStr20))
+transition ConfigureValidator(address: ByStr20)
   IsContractOwner;
+  validator_contract := address;
 
-  forall addresses ConfigureValidator
+  e = {
+    _eventname : "ValidatorChangedEvent";
+    validator_contract: address
+  };
+  event e
 end
 
 transition RemoveAppList(app_owners: List ByStr20)
