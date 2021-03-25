@@ -23,9 +23,7 @@ type Error =
   | CodeNotContractOwner
   | CodeOnPause
   | CodeNotValidator
-  | CodeDoesNotExists
   | CodeNotFound
-  | CodeInsufficientZLPAmount
   | CodeAlreadyExists
 
 let make_error =
@@ -35,10 +33,8 @@ let make_error =
       | CodeNotContractOwner      => Int32 -1
       | CodeOnPause               => Int32 -2
       | CodeNotValidator          => Int32 -3
-      | CodeDoesNotExists         => Int32 -4
-      | CodeNotFound              => Int32 -5
-      | CodeInsufficientZLPAmount => Int32 -6
-      | CodeAlreadyExists         => Int32 -7
+      | CodeNotFound              => Int32 -4
+      | CodeAlreadyExists         => Int32 -5
       end
     in
     { _exception : "Error"; code : result_code }
