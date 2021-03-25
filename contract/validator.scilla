@@ -1,0 +1,501 @@
+scilla_version 0
+
+library ZilPayExplorer
+
+(* User-defined ADTs *)
+type Dummy =
+| Dummy
+
+(* Global variables *)
+let zero128 = Uint128 0
+let zero256 = Uint256 0
+let zerobn = BNum 0
+let verdad = Dummy
+
+let one_msg =
+  fun (msg: Message) =>
+    let nil_msg = Nil {Message} in
+    Cons {Message} msg nil_msg
+
+let option_value =
+  tfun 'A =>
+  fun (default: 'A) =>
+  fun (opt_val: Option 'A) =>
+    match opt_val with
+    | Some v => v
+    | None => default
+    end
+
+let option_uint256 = @option_value Uint256
+
+let bn_to_uint =
+  fun (block_number: BNum) =>
+  let int_block = builtin bsub block_number zerobn in
+  let some_int_block = builtin to_uint256 int_block in
+    option_uint256 zero256 some_int_block
+
+let zlp_to_blocks =
+    fun (amount: Uint128) =>
+    fun (block_decimal: Uint256) =>
+    let some_amount_256 = builtin to_uint256 amount in
+    let amount_256 = option_uint256 zero256 some_amount_256 in
+      builtin div amount_256 block_decimal
+
+
+(* Custom ADT storing - Title, ipfs_description, url, ipfs_image, ipfs_icon, category *)
+type App =
+| App of String String String (List String) String Uint32
+
+(* Custom ADT storing - end_block_number, owner_of_app, ipfs_banner_url *)
+type AD =
+| AD of Uint256 ByStr20 String
+
+(* Error events *)
+type Error =
+  | CodeIsNotZLPContract
+  | CodeNotContractOwner
+  | CodeOnPause
+  | CodeNotValidator
+  | CodeDoesNotExists
+  | CodeNotFound
+  | CodeInsufficientZLPAmount
+  | CodeAlreadyExists
+
+let make_error =
+  fun (result : Error) =>
+    let result_code =
+      match result with
+      | CodeIsNotZLPContract      => Int32 -1
+      | CodeNotContractOwner      => Int32 -2
+      | CodeOnPause               => Int32 -3
+      | CodeNotValidator          => Int32 -4
+      | CodeDoesNotExists         => Int32 -5
+      | CodeNotFound              => Int32 -6
+      | CodeInsufficientZLPAmount => Int32 -7
+      | CodeAlreadyExists         => Int32 -8
+      end
+    in
+    { _exception : "Error"; code : result_code }
+
+contract ZilPayExplorer
+
+(*  Parameters *)
+(
+  contract_owner: ByStr20,
+  proxy_zlp: ByStr20
+)
+
+
+(* Mutable fields *)
+field pause: Bool = False
+
+field min_price_for_ad: Uint128 = Uint128 2000000000000000000
+field price_for_app: Uint128 = Uint128 0
+field block_decimal: Uint256 = Uint256 2000000000000000000
+
+field contract_proxy_zlp: ByStr20 = proxy_zlp
+
+field wait_list_app: Map ByStr20 App = Emp ByStr20 App
+field app_list: Map ByStr20 App = Emp ByStr20 App
+
+field ad_list: Map ByStr20 AD = Emp ByStr20 AD
+field wait_ad_list: Map ByStr20 AD = Emp ByStr20 AD
+
+field validator_list: Map ByStr20 Dummy = let emp_map = Emp ByStr20 Dummy in
+  builtin put emp_map contract_owner verdad 
+
+
+(* Emit Errors *)
+procedure ThrowError(err : Error)
+  e = make_error err;
+  throw e
+end
+
+procedure IsValidator(address: ByStr20)
+  is_validator <- exists validator_list[address];
+
+  match is_validator with
+  | True =>
+  | False =>
+    err = CodeNotValidator;
+    ThrowError err
+  end
+end
+
+procedure IsExistsApp(app_owner: ByStr20)
+  is_app <- exists app_list[app_owner];
+
+  match is_app with
+  | False =>
+    err = CodeDoesNotExists;
+    ThrowError err
+  | True =>
+  end
+end
+
+procedure IsAlreadyExistsApp(app_owner: ByStr20)
+  is_app <- exists app_list[app_owner];
+
+  match is_app with
+  | False =>
+  | True =>
+    err = CodeAlreadyExists;
+    ThrowError err
+  end
+end
+
+procedure IsWaitExistsApp(app_owner: ByStr20)
+  is_app <- exists wait_list_app[app_owner];
+
+  match is_app with
+  | False =>
+    err = CodeDoesNotExists;
+    ThrowError err
+  | True =>
+  end
+end
+
+procedure IsExistsAD(app_owner: ByStr20)
+  is_app <- exists wait_ad_list[app_owner];
+
+  match is_app with
+  | False =>
+    err = CodeDoesNotExists;
+    ThrowError err
+  | True =>
+  end
+end
+
+procedure CheckPriceForAD(amount: Uint128)
+  price <- min_price_for_ad;
+
+  is_lt = builtin lt amount price;
+
+  match is_lt with
+  | True =>
+    err = CodeInsufficientZLPAmount;
+    ThrowError err
+  | False =>
+  end
+end
+
+procedure CheckPause()
+  curent_pause <- pause;
+
+  match curent_pause with
+  | True =>
+    err = CodeOnPause;
+    ThrowError err
+  | False =>
+  end
+end
+
+procedure IsContractOwner()
+  is_contract_owner = builtin eq contract_owner _sender;
+  match is_contract_owner with
+  | True => 
+  | False =>
+    err = CodeNotContractOwner;
+    ThrowError err
+  end
+end
+
+procedure AcceptZLP(amount: Uint128, from: ByStr20)
+  is_zero = builtin eq zero128 amount;
+
+  match is_zero with
+  | False =>
+    proxy_zlp_address <- contract_proxy_zlp;
+
+    call_accept_zlp = {
+      _tag: "AcceptZLP";
+      _recipient: proxy_zlp_address;
+      _amount: Uint128 0;
+      from: from;
+      amount: amount
+    };
+
+    msgs = one_msg call_accept_zlp;
+
+    send msgs
+  | True =>
+  end
+end
+
+
+(* Admin transitions *)
+transition ConfigurePause()
+  IsContractOwner;
+  curent_pause <- pause;
+
+  new_pause = match curent_pause with
+  | True =>
+    False
+  | False =>
+    True
+  end;
+
+  pause := new_pause;
+
+  e = {
+    _eventname : "ContractPauseEvent";
+    pause: new_pause
+  };
+  event e
+end
+
+transition ConfigureBlockDecimal(value: Uint256)
+  IsContractOwner;
+
+  block_decimal := value;
+
+  e = {
+    _eventname : "ConfiguredBlockDecimalEvent";
+    new_block_decimal: value
+  };
+  event e
+end
+
+transition ConfigureADPrice(new_price: Uint128)
+  IsContractOwner;
+
+  old_price <- min_price_for_ad;
+
+  min_price_for_ad := new_price;
+
+  e = {
+    _eventname : "ConfiguredAdPriceEvent";
+    old_price: old_price;
+    new_price: new_price
+  };
+  event e
+end
+
+transition ConfigureAppPrice(new_price: Uint128)
+  IsContractOwner;
+
+  old_price <- price_for_app;
+
+  price_for_app := new_price;
+
+  e = {
+    _eventname : "ConfiguredAppPriceEvent";
+    old_price: old_price;
+    new_price: new_price
+  };
+  event e
+end
+
+transition RemoveApp(app_owner: ByStr20)
+  IsContractOwner;
+
+  some_app <- app_list[app_owner];
+
+  match some_app with
+  | Some app =>
+    delete app_list[app_owner];
+
+    e = {
+      _eventname : "AppRemoveEvent";
+      removed_app: app;
+      app_owner: app_owner
+    };
+    event e
+  | None =>
+    err = CodeNotFound;
+    ThrowError err
+  end
+end
+
+transition RemoveAD(app_owner: ByStr20)
+  IsContractOwner;
+
+  some_ad <- ad_list[app_owner];
+
+  match some_ad with
+  | Some ad =>
+    delete ad_list[app_owner];
+
+    e = {
+      _eventname : "ADRemoveEvent";
+      removed_ad: ad;
+      app_owner: app_owner
+    };
+    event e
+  | None =>
+    err = CodeNotFound;
+    ThrowError err
+  end
+end
+
+transition ConfigureProxyZLP(contractAddr: ByStr20)
+  IsContractOwner;
+
+  old_proxy_zlp <- contract_proxy_zlp;
+
+  contract_proxy_zlp := contractAddr;
+
+  e = {
+    _eventname : "ConfigureProxyZLPEvent";
+    new_proxy_zlp: contractAddr;
+    old_proxy_zlp: old_proxy_zlp
+  };
+  event e
+end
+
+transition ConfigureValidator(address: ByStr20)
+  IsContractOwner;
+
+  is_validator <- exists validator_list[address];
+
+  match is_validator with
+  | True =>
+    delete validator_list[address];
+
+    e = {
+      _eventname : "RemovedValidatorEvent";
+      address: address
+    };
+    event e
+  | False =>
+    validator_list[address] := verdad;
+
+    e = {
+      _eventname : "AddedValidatorEvent";
+      address: address
+    };
+    event e
+  end
+end
+(* Admin transitions *)
+
+(* Validator transitions *)
+transition ValidationAppSuccess(app_owner: ByStr20)
+  CheckPause;
+  IsValidator _sender;
+  IsWaitExistsApp app_owner;
+
+  some_confirmed_app <- wait_list_app[app_owner];
+
+  match some_confirmed_app with
+  | Some confirmed_app =>
+    delete wait_list_app[app_owner];
+
+    app_list[app_owner] := confirmed_app;
+
+    e = {
+      _eventname : "ValidationAppSuccessEvent";
+      app: confirmed_app;
+      app_owner: app_owner
+    };
+    event e
+  | None =>
+    err = CodeNotFound;
+    ThrowError err
+  end
+end
+
+transition ValidationAppReject(app_owner: ByStr20)
+  CheckPause;
+  IsValidator _sender;
+  IsWaitExistsApp app_owner;
+
+  delete wait_list_app[app_owner];
+
+  e = {
+    _eventname : "ValidationAppRejectEvent";
+    app_owner: app_owner
+  };
+  event e
+end
+
+transition ValidationADSuccess(ad_owner: ByStr20)
+  CheckPause;
+  IsValidator _sender;
+  IsExistsAD ad_owner;
+
+  some_confirmed_ad <- wait_ad_list[ad_owner];
+  current_block <- & BLOCKNUMBER;
+
+  match some_confirmed_ad with
+  | Some confirmed_ad =>
+    match confirmed_ad with
+    | AD block owner url =>
+      delete wait_ad_list[ad_owner];
+
+      block_256 = bn_to_uint current_block;
+      end_block = builtin add block_256 block;
+      new_add = AD end_block owner url;
+
+      ad_list[ad_owner] := new_add;
+
+      e = {
+        _eventname : "ValidationADSuccessEvent";
+        new_banner: new_add;
+        current_block: current_block;
+        ad_owner: ad_owner
+      };
+      event e
+    end
+  | None =>
+    err = CodeNotFound;
+    ThrowError err
+  end
+end
+
+transition ValidationADReject(app_owner: ByStr20)
+  CheckPause;
+  IsValidator _sender;
+  IsExistsAD app_owner;
+
+  delete wait_ad_list[app_owner];
+
+  e = {
+    _eventname : "ValidationADRejectEvent";
+    app_owner: app_owner
+  };
+  event e
+end
+(* Validator transitions *)
+
+(* User transitions *)
+transition AddApp(app: App)
+  CheckPause;
+  IsAlreadyExistsApp _sender;
+
+  price <- price_for_app;
+
+  AcceptZLP price _sender;
+
+  wait_list_app[_sender] := app;
+
+  e = {
+    _eventname : "AddedAppEvent";
+    added_app: app;
+    onwer: _sender
+  };
+  event e
+end
+
+transition AddAD(amountZLP: Uint128, app_owner: ByStr20, url: String)
+  CheckPause;
+  IsExistsApp app_owner;
+  CheckPriceForAD amountZLP;
+  AcceptZLP amountZLP _sender;
+  
+  decimal <- block_decimal;
+
+  zlp_to_blocks = zlp_to_blocks amountZLP decimal;
+  new_ad = AD zlp_to_blocks app_owner url;
+
+  wait_ad_list[_sender] := new_ad;
+
+  e = {
+    _eventname : "AddedADEvent";
+    ad: new_ad;
+    amount_of_blocks: zlp_to_blocks;
+    onwer: _sender
+  };
+  event e
+end
+(* User transitions *)
