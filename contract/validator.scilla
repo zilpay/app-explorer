@@ -6,8 +6,9 @@ library ZilPayValidator
 type Dummy =
 | Dummy
 
+let zero_address = 0x0000000000000000000000000000000000000000
+
 (* Global variables *)
-let zero128 = Uint128 0
 let zero256 = Uint256 0
 let zerobn = BNum 0
 let verdad = Dummy
@@ -52,27 +53,21 @@ type AD =
 
 (* Error events *)
 type Error =
-  | CodeIsNotZLPContract
   | CodeNotContractOwner
   | CodeOnPause
   | CodeNotValidator
-  | CodeDoesNotExists
   | CodeNotFound
-  | CodeInsufficientZLPAmount
-  | CodeAlreadyExists
+  | CodeNotManager
 
 let make_error =
   fun (result : Error) =>
     let result_code =
       match result with
-      | CodeIsNotZLPContract      => Int32 -1
-      | CodeNotContractOwner      => Int32 -2
-      | CodeOnPause               => Int32 -3
-      | CodeNotValidator          => Int32 -4
-      | CodeDoesNotExists         => Int32 -5
-      | CodeNotFound              => Int32 -6
-      | CodeInsufficientZLPAmount => Int32 -7
-      | CodeAlreadyExists         => Int32 -8
+      | CodeNotContractOwner      => Int32 -1
+      | CodeOnPause               => Int32 -2
+      | CodeNotValidator          => Int32 -3
+      | CodeNotFound              => Int32 -4
+      | CodeNotManager            => Int32 -5
       end
     in
     { _exception : "Error"; code : result_code }
@@ -85,20 +80,15 @@ contract ZilPayValidator
   explorer: ByStr20
 )
 
-
 (* Mutable fields *)
 field pause: Bool = False
 
-field min_price_for_ad: Uint128 = Uint128 2000000000000000000
-field price_for_app: Uint128 = Uint128 0
 field block_decimal: Uint256 = Uint256 2000000000000000000
 
 field wait_list_app: Map ByStr20 App = Emp ByStr20 App
-field app_list: Map ByStr20 App = Emp ByStr20 App
-
-field ad_list: Map ByStr20 AD = Emp ByStr20 AD
 field wait_ad_list: Map ByStr20 AD = Emp ByStr20 AD
 
+field manager: ByStr20 = zero_address
 field validator_list: Map ByStr20 Dummy = let emp_map = Emp ByStr20 Dummy in
   builtin put emp_map contract_owner verdad 
 
@@ -109,8 +99,8 @@ procedure ThrowError(err : Error)
   throw e
 end
 
-procedure IsValidator(address: ByStr20)
-  is_validator <- exists validator_list[address];
+procedure IsValidator()
+  is_validator <- exists validator_list[_sender];
 
   match is_validator with
   | True =>
@@ -120,24 +110,15 @@ procedure IsValidator(address: ByStr20)
   end
 end
 
-procedure IsExistsApp(app_owner: ByStr20)
-  is_app <- exists app_list[app_owner];
+procedure IsManager()
+  address_manager <- manager;
 
-  match is_app with
-  | False =>
-    err = CodeDoesNotExists;
-    ThrowError err
+  is_manager = builtin eq address_manager _sender;
+
+  match is_manager with
   | True =>
-  end
-end
-
-procedure IsAlreadyExistsApp(app_owner: ByStr20)
-  is_app <- exists app_list[app_owner];
-
-  match is_app with
   | False =>
-  | True =>
-    err = CodeAlreadyExists;
+    err = CodeNotManager;
     ThrowError err
   end
 end
@@ -147,33 +128,20 @@ procedure IsWaitExistsApp(app_owner: ByStr20)
 
   match is_app with
   | False =>
-    err = CodeDoesNotExists;
+    err = CodeNotFound;
     ThrowError err
   | True =>
   end
 end
 
-procedure IsExistsAD(app_owner: ByStr20)
-  is_app <- exists wait_ad_list[app_owner];
+procedure IsExistsAD(ad_owner: ByStr20)
+  is_ad <- exists wait_ad_list[ad_owner];
 
-  match is_app with
+  match is_ad with
   | False =>
-    err = CodeDoesNotExists;
+    err = CodeNotFound;
     ThrowError err
   | True =>
-  end
-end
-
-procedure CheckPriceForAD(amount: Uint128)
-  price <- min_price_for_ad;
-
-  is_lt = builtin lt amount price;
-
-  match is_lt with
-  | True =>
-    err = CodeInsufficientZLPAmount;
-    ThrowError err
-  | False =>
   end
 end
 
@@ -198,28 +166,72 @@ procedure IsContractOwner()
   end
 end
 
-procedure AcceptZLP(amount: Uint128, from: ByStr20)
-  is_zero = builtin eq zero128 amount;
+procedure ConfigureValidator(address: ByStr20)
+  is_validator <- exists validator_list[address];
 
-  match is_zero with
-  | False =>
-    proxy_zlp_address <- contract_proxy_zlp;
-
-    call_accept_zlp = {
-      _tag: "AcceptZLP";
-      _recipient: proxy_zlp_address;
-      _amount: Uint128 0;
-      from: from;
-      amount: amount
-    };
-
-    msgs = one_msg call_accept_zlp;
-
-    send msgs
+  match is_validator with
   | True =>
+    delete validator_list[address];
+
+    e = {
+      _eventname : "RemovedValidatorEvent";
+      address: address
+    };
+    event e
+  | False =>
+    validator_list[address] := verdad;
+
+    e = {
+      _eventname : "AddedValidatorEvent";
+      address: address
+    };
+    event e
   end
 end
 
+procedure ValidationADReject(app_owner: ByStr20)
+  IsExistsAD app_owner;
+
+  delete wait_ad_list[app_owner];
+
+  e = {
+    _eventname : "ValidationADRejectEvent";
+    app_owner: app_owner
+  };
+  event e
+end
+
+procedure ValidationADSuccess(ad_owner: ByStr20)
+  IsExistsAD ad_owner;
+
+  some_confirmed_ad <- wait_ad_list[ad_owner];
+  current_block <- & BLOCKNUMBER;
+
+  match some_confirmed_ad with
+  | Some confirmed_ad =>
+    match confirmed_ad with
+    | AD block owner url =>
+      delete wait_ad_list[ad_owner];
+
+      block_256 = bn_to_uint current_block;
+      end_block = builtin add block_256 block;
+      new_add = AD end_block owner url;
+
+      (* ad_list[ad_owner] := new_add; *)
+
+      e = {
+        _eventname : "ValidationADSuccessEvent";
+        new_banner: new_add;
+        current_block: current_block;
+        ad_owner: ad_owner
+      };
+      event e
+    end
+  | None =>
+    err = CodeNotFound;
+    ThrowError err
+  end
+end
 
 (* Admin transitions *)
 transition ConfigurePause()
@@ -242,6 +254,18 @@ transition ConfigurePause()
   event e
 end
 
+transition ConfigureManager(new_manager: ByStr20)
+  IsContractOwner;
+
+  manager := new_manager;
+
+  e = {
+    _eventname : "ConfigureManagerEvent";
+    manager: new_manager
+  };
+  event e
+end
+
 transition ConfigureBlockDecimal(value: Uint256)
   IsContractOwner;
 
@@ -254,123 +278,17 @@ transition ConfigureBlockDecimal(value: Uint256)
   event e
 end
 
-transition ConfigureADPrice(new_price: Uint128)
+transition ConfigureValidatorList(addresses: List ByStr20)
   IsContractOwner;
 
-  old_price <- min_price_for_ad;
-
-  min_price_for_ad := new_price;
-
-  e = {
-    _eventname : "ConfiguredAdPriceEvent";
-    old_price: old_price;
-    new_price: new_price
-  };
-  event e
-end
-
-transition ConfigureAppPrice(new_price: Uint128)
-  IsContractOwner;
-
-  old_price <- price_for_app;
-
-  price_for_app := new_price;
-
-  e = {
-    _eventname : "ConfiguredAppPriceEvent";
-    old_price: old_price;
-    new_price: new_price
-  };
-  event e
-end
-
-transition RemoveApp(app_owner: ByStr20)
-  IsContractOwner;
-
-  some_app <- app_list[app_owner];
-
-  match some_app with
-  | Some app =>
-    delete app_list[app_owner];
-
-    e = {
-      _eventname : "AppRemoveEvent";
-      removed_app: app;
-      app_owner: app_owner
-    };
-    event e
-  | None =>
-    err = CodeNotFound;
-    ThrowError err
-  end
-end
-
-transition RemoveAD(app_owner: ByStr20)
-  IsContractOwner;
-
-  some_ad <- ad_list[app_owner];
-
-  match some_ad with
-  | Some ad =>
-    delete ad_list[app_owner];
-
-    e = {
-      _eventname : "ADRemoveEvent";
-      removed_ad: ad;
-      app_owner: app_owner
-    };
-    event e
-  | None =>
-    err = CodeNotFound;
-    ThrowError err
-  end
-end
-
-transition ConfigureProxyZLP(contractAddr: ByStr20)
-  IsContractOwner;
-
-  old_proxy_zlp <- contract_proxy_zlp;
-
-  contract_proxy_zlp := contractAddr;
-
-  e = {
-    _eventname : "ConfigureProxyZLPEvent";
-    new_proxy_zlp: contractAddr;
-    old_proxy_zlp: old_proxy_zlp
-  };
-  event e
-end
-
-transition ConfigureValidator(address: ByStr20)
-  IsContractOwner;
-
-  is_validator <- exists validator_list[address];
-
-  match is_validator with
-  | True =>
-    delete validator_list[address];
-
-    e = {
-      _eventname : "RemovedValidatorEvent";
-      address: address
-    };
-    event e
-  | False =>
-    validator_list[address] := verdad;
-
-    e = {
-      _eventname : "AddedValidatorEvent";
-      address: address
-    };
-    event e
-  end
+  forall addresses ConfigureValidator
 end
 (* Admin transitions *)
 
 (* Validator transitions *)
 transition ValidationAppSuccess(app_owner: ByStr20)
   CheckPause;
-  IsValidator _sender;
+  IsValidator;
   IsWaitExistsApp app_owner;
 
   some_confirmed_app <- wait_list_app[app_owner];
@@ -379,7 +297,7 @@ transition ValidationAppSuccess(app_owner: ByStr20)
   | Some confirmed_app =>
     delete wait_list_app[app_owner];
 
-    app_list[app_owner] := confirmed_app;
+    wait_list_app[app_owner] := confirmed_app;
 
     e = {
       _eventname : "ValidationAppSuccessEvent";
@@ -395,7 +313,7 @@ end
 
 transition ValidationAppReject(app_owner: ByStr20)
   CheckPause;
-  IsValidator _sender;
+  IsValidator;
   IsWaitExistsApp app_owner;
 
   delete wait_list_app[app_owner];
@@ -407,63 +325,25 @@ transition ValidationAppReject(app_owner: ByStr20)
   event e
 end
 
-transition ValidationADSuccess(ad_owner: ByStr20)
+transition ADSuccessList(ad_owners: List ByStr20)
   CheckPause;
-  IsValidator _sender;
-  IsExistsAD ad_owner;
+  IsValidator;
 
-  some_confirmed_ad <- wait_ad_list[ad_owner];
-  current_block <- & BLOCKNUMBER;
-
-  match some_confirmed_ad with
-  | Some confirmed_ad =>
-    match confirmed_ad with
-    | AD block owner url =>
-      delete wait_ad_list[ad_owner];
-
-      block_256 = bn_to_uint current_block;
-      end_block = builtin add block_256 block;
-      new_add = AD end_block owner url;
-
-      ad_list[ad_owner] := new_add;
-
-      e = {
-        _eventname : "ValidationADSuccessEvent";
-        new_banner: new_add;
-        current_block: current_block;
-        ad_owner: ad_owner
-      };
-      event e
-    end
-  | None =>
-    err = CodeNotFound;
-    ThrowError err
-  end
+  forall ad_owners ValidationADSuccess
 end
 
-transition ValidationADReject(app_owner: ByStr20)
+transition ADRejectList(ad_owners: List ByStr20)
   CheckPause;
-  IsValidator _sender;
-  IsExistsAD app_owner;
+  IsValidator;
 
-  delete wait_ad_list[app_owner];
-
-  e = {
-    _eventname : "ValidationADRejectEvent";
-    app_owner: app_owner
-  };
-  event e
+  forall ad_owners ValidationADReject
 end
 (* Validator transitions *)
 
-(* User transitions *)
+(* manager transitions *)
 transition AddApp(app: App)
   CheckPause;
-  IsAlreadyExistsApp _sender;
-
-  price <- price_for_app;
-
-  AcceptZLP price _sender;
+  IsManager;
 
   wait_list_app[_sender] := app;
 
@@ -477,9 +357,7 @@ end
 
 transition AddAD(amountZLP: Uint128, app_owner: ByStr20, url: String)
   CheckPause;
-  IsExistsApp app_owner;
-  CheckPriceForAD amountZLP;
-  AcceptZLP amountZLP _sender;
+  IsManager;
   
   decimal <- block_decimal;
 
@@ -496,4 +374,4 @@ transition AddAD(amountZLP: Uint128, app_owner: ByStr20, url: String)
   };
   event e
 end
-(* User transitions *)
+(* manager transitions *)
