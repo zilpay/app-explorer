@@ -159,7 +159,8 @@ procedure SendAppToCheck(app: App)
     _tag: "AddApp";
     _recipient: recipient;
     _amount: Uint128 0;
-    app: app
+    app: app;
+    owner: _sender
   };
 
   msgs = one_msg call_accept_zlp;
@@ -174,7 +175,8 @@ procedure SendADToCheck(ad: AD)
     _tag: "AddAD";
     _recipient: recipient;
     _amount: Uint128 0;
-    ad: ad
+    ad: ad;
+    owner: _sender
   };
 
   msgs = one_msg call_accept_zlp;
@@ -270,6 +272,18 @@ transition AddApp(app: App)
   AcceptZLP price _sender;
 
   SendAppToCheck app
+end
+
+transition DEVAddApp(title: String, ipfs_description: String, url: String, ipfs_image: List String, ipfs_icon: String, category: Uint32)
+  CheckPause;
+
+  price <- price_for_app;
+
+  AcceptZLP price _sender;
+
+  new_app = App title ipfs_description url ipfs_image ipfs_icon category;
+
+  SendAppToCheck new_app
 end
 
 transition AddAD(amountZLP: Uint128, app_owner: ByStr20, url: String)

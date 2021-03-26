@@ -375,36 +375,30 @@ end
 (* Validator transitions *)
 
 (* manager transitions *)
-transition AddApp(app: App)
+transition AddApp(app: App, owner: ByStr20)
   CheckPause;
   IsManager;
 
-  wait_list_app[_sender] := app;
+  wait_list_app[owner] := app;
 
   e = {
     _eventname : "AddedAppEvent";
     added_app: app;
-    onwer: _sender
+    onwer: owner
   };
   event e
 end
 
-transition AddAD(amountZLP: Uint128, app_owner: ByStr20, url: String)
+transition AddAD(ad: AD, owner: ByStr20)
   CheckPause;
   IsManager;
-  
-  decimal <- block_decimal;
 
-  zlp_to_blocks = zlp_to_blocks amountZLP decimal;
-  new_ad = AD zlp_to_blocks app_owner url;
-
-  wait_ad_list[_sender] := new_ad;
+  wait_ad_list[owner] := ad;
 
   e = {
     _eventname : "AddedADEvent";
-    ad: new_ad;
-    amount_of_blocks: zlp_to_blocks;
-    onwer: _sender
+    ad: ad;
+    onwer: owner
   };
   event e
 end
