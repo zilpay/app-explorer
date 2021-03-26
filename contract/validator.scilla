@@ -35,13 +35,6 @@ let bn_to_uint =
   let some_int_block = builtin to_uint256 int_block in
     option_uint256 zero256 some_int_block
 
-let zlp_to_blocks =
-    fun (amount: Uint128) =>
-    fun (block_decimal: Uint256) =>
-    let some_amount_256 = builtin to_uint256 amount in
-    let amount_256 = option_uint256 zero256 some_amount_256 in
-      builtin div amount_256 block_decimal
-
 
 (* Custom ADT storing - Title, ipfs_description, url, ipfs_image, ipfs_icon, category *)
 type App =
@@ -82,8 +75,6 @@ contract ZilPayValidator
 
 (* Mutable fields *)
 field pause: Bool = False
-
-field block_decimal: Uint256 = Uint256 2000000000000000000
 
 field wait_list_app: Map ByStr20 App = Emp ByStr20 App
 field wait_ad_list: Map ByStr20 AD = Emp ByStr20 AD
@@ -321,18 +312,6 @@ transition ConfigureManager(new_manager: ByStr20)
   e = {
     _eventname : "ConfigureManagerEvent";
     manager: new_manager
-  };
-  event e
-end
-
-transition ConfigureBlockDecimal(value: Uint256)
-  IsContractOwner;
-
-  block_decimal := value;
-
-  e = {
-    _eventname : "ConfiguredBlockDecimalEvent";
-    new_block_decimal: value
   };
   event e
 end
