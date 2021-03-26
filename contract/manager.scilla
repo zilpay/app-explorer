@@ -168,7 +168,7 @@ procedure SendAppToCheck(app: App)
   send msgs
 end
 
-procedure SendADToCheck(ad: AD)
+procedure SendADToCheck(ad: AD, owner: ByStr20)
   recipient <- contract_validator;
 
   call_accept_zlp = {
@@ -176,7 +176,7 @@ procedure SendADToCheck(ad: AD)
     _recipient: recipient;
     _amount: Uint128 0;
     ad: ad;
-    owner: _sender
+    owner: owner
   };
 
   msgs = one_msg call_accept_zlp;
@@ -296,6 +296,6 @@ transition AddAD(amountZLP: Uint128, app_owner: ByStr20, url: String)
   zlp_to_blocks = zlp_to_blocks amountZLP decimal;
   new_ad = AD zlp_to_blocks app_owner url;
 
-  SendADToCheck new_ad
+  SendADToCheck new_ad app_owner
 end
 (* User transitions *)
