@@ -1,0 +1,307 @@
+scilla_version 0
+
+library ZilPayManager
+
+(* User-defined ADTs *)
+type Dummy =
+| Dummy
+
+(* Global variables *)
+let zero128 = Uint128 0
+let zero256 = Uint256 0
+let zerobn = BNum 0
+let verdad = Dummy
+
+let one_msg =
+  fun (msg: Message) =>
+    let nil_msg = Nil {Message} in
+    Cons {Message} msg nil_msg
+
+let option_value =
+  tfun 'A =>
+  fun (default: 'A) =>
+  fun (opt_val: Option 'A) =>
+    match opt_val with
+    | Some v => v
+    | None => default
+    end
+
+let option_uint256 = @option_value Uint256
+
+let bn_to_uint =
+  fun (block_number: BNum) =>
+  let int_block = builtin bsub block_number zerobn in
+  let some_int_block = builtin to_uint256 int_block in
+    option_uint256 zero256 some_int_block
+
+let zlp_to_blocks =
+    fun (amount: Uint128) =>
+    fun (block_decimal: Uint256) =>
+    let some_amount_256 = builtin to_uint256 amount in
+    let amount_256 = option_uint256 zero256 some_amount_256 in
+      builtin div amount_256 block_decimal
+
+
+(* Custom ADT storing - Title, ipfs_description, url, ipfs_image, ipfs_icon, category *)
+type App =
+| App of String String String (List String) String Uint32
+
+(* Custom ADT storing - end_block_number, owner_of_app, ipfs_banner_url *)
+type AD =
+| AD of Uint256 ByStr20 String
+
+(* Error events *)
+type Error =
+  | CodeIsNotZLPContract
+  | CodeNotContractOwner
+  | CodeOnPause
+  | CodeNotValidator
+  | CodeDoesNotExists
+  | CodeNotFound
+  | CodeInsufficientZLPAmount
+  | CodeAlreadyExists
+
+let make_error =
+  fun (result : Error) =>
+    let result_code =
+      match result with
+      | CodeIsNotZLPContract      => Int32 -1
+      | CodeNotContractOwner      => Int32 -2
+      | CodeOnPause               => Int32 -3
+      | CodeNotValidator          => Int32 -4
+      | CodeDoesNotExists         => Int32 -5
+      | CodeNotFound              => Int32 -6
+      | CodeInsufficientZLPAmount => Int32 -7
+      | CodeAlreadyExists         => Int32 -8
+      end
+    in
+    { _exception : "Error"; code : result_code }
+
+contract ZilPayManager
+
+(*  Parameters *)
+(
+  contract_owner: ByStr20,
+  proxy_zlp: ByStr20,
+  validator: ByStr20
+)
+
+
+(* Mutable fields *)
+field pause: Bool = False
+
+field min_price_for_ad: Uint128 = Uint128 2000000000000000000
+field price_for_app: Uint128 = Uint128 0
+field block_decimal: Uint256 = Uint256 2000000000000000000
+
+field contract_proxy_zlp: ByStr20 = proxy_zlp
+field contract_validator: ByStr20 = validator
+
+(* Emit Errors *)
+procedure ThrowError(err : Error)
+  e = make_error err;
+  throw e
+end
+
+procedure IsValidator()
+  contract_address <- contract_validator;
+  is_validator = builtin eq contract_address _sender;
+
+  match is_validator with
+  | True =>
+  | False =>
+    err = CodeNotValidator;
+    ThrowError err
+  end
+end
+
+procedure CheckPriceForAD(amount: Uint128)
+  price <- min_price_for_ad;
+
+  is_lt = builtin lt amount price;
+
+  match is_lt with
+  | True =>
+    err = CodeInsufficientZLPAmount;
+    ThrowError err
+  | False =>
+  end
+end
+
+procedure CheckPause()
+  curent_pause <- pause;
+
+  match curent_pause with
+  | True =>
+    err = CodeOnPause;
+    ThrowError err
+  | False =>
+  end
+end
+
+procedure IsContractOwner()
+  is_contract_owner = builtin eq contract_owner _sender;
+
+  match is_contract_owner with
+  | True => 
+  | False =>
+    err = CodeNotContractOwner;
+    ThrowError err
+  end
+end
+
+procedure AcceptZLP(amount: Uint128, from: ByStr20)
+  is_zero = builtin eq zero128 amount;
+
+  match is_zero with
+  | False =>
+    proxy_zlp_address <- contract_proxy_zlp;
+
+    call_accept_zlp = {
+      _tag: "AcceptZLP";
+      _recipient: proxy_zlp_address;
+      _amount: Uint128 0;
+      from: from;
+      amount: amount
+    };
+
+    msgs = one_msg call_accept_zlp;
+
+    send msgs
+  | True =>
+  end
+end
+
+procedure SendAppToCheck(app: App)
+  recipient <- contract_validator;
+
+  call_accept_zlp = {
+    _tag: "AddApp";
+    _recipient: recipient;
+    _amount: Uint128 0;
+    app: app
+  };
+
+  msgs = one_msg call_accept_zlp;
+
+  send msgs
+end
+
+procedure SendADToCheck(ad: AD)
+  recipient <- contract_validator;
+
+  call_accept_zlp = {
+    _tag: "AddAD";
+    _recipient: recipient;
+    _amount: Uint128 0;
+    ad: ad
+  };
+
+  msgs = one_msg call_accept_zlp;
+
+  send msgs
+end
+
+(* Admin transitions *)
+transition ConfigurePause()
+  IsContractOwner;
+  curent_pause <- pause;
+
+  new_pause = match curent_pause with
+  | True =>
+    False
+  | False =>
+    True
+  end;
+
+  pause := new_pause;
+
+  e = {
+    _eventname : "ContractPauseEvent";
+    pause: new_pause
+  };
+  event e
+end
+
+transition ConfigureBlockDecimal(value: Uint256)
+  IsContractOwner;
+
+  block_decimal := value;
+
+  e = {
+    _eventname : "ConfiguredBlockDecimalEvent";
+    new_block_decimal: value
+  };
+  event e
+end
+
+transition ConfigureADPrice(new_price: Uint128)
+  IsContractOwner;
+
+  old_price <- min_price_for_ad;
+
+  min_price_for_ad := new_price;
+
+  e = {
+    _eventname : "ConfiguredAdPriceEvent";
+    old_price: old_price;
+    new_price: new_price
+  };
+  event e
+end
+
+transition ConfigureAppPrice(new_price: Uint128)
+  IsContractOwner;
+
+  old_price <- price_for_app;
+
+  price_for_app := new_price;
+
+  e = {
+    _eventname : "ConfiguredAppPriceEvent";
+    old_price: old_price;
+    new_price: new_price
+  };
+  event e
+end
+
+transition ConfigureProxyZLP(contractAddr: ByStr20)
+  IsContractOwner;
+
+  old_proxy_zlp <- contract_proxy_zlp;
+
+  contract_proxy_zlp := contractAddr;
+
+  e = {
+    _eventname : "ConfigureProxyZLPEvent";
+    new_proxy_zlp: contractAddr;
+    old_proxy_zlp: old_proxy_zlp
+  };
+  event e
+end
+(* Admin transitions *)
+
+(* User transitions *)
+transition AddApp(app: App)
+  CheckPause;
+
+  price <- price_for_app;
+
+  AcceptZLP price _sender;
+
+  SendAppToCheck app
+end
+
+transition AddAD(amountZLP: Uint128, app_owner: ByStr20, url: String)
+  CheckPause;
+  CheckPriceForAD amountZLP;
+  AcceptZLP amountZLP _sender;
+  
+  decimal <- block_decimal;
+
+  zlp_to_blocks = zlp_to_blocks amountZLP decimal;
+  new_ad = AD zlp_to_blocks app_owner url;
+
+  SendADToCheck new_ad
+end
+(* User transitions *)
