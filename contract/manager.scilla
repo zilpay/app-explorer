@@ -2,15 +2,9 @@ scilla_version 0
 
 library ZilPayManager
 
-(* User-defined ADTs *)
-type Dummy =
-| Dummy
-
 (* Global variables *)
 let zero128 = Uint128 0
 let zero256 = Uint256 0
-let zerobn = BNum 0
-let verdad = Dummy
 
 let one_msg =
   fun (msg: Message) =>
@@ -27,12 +21,6 @@ let option_value =
     end
 
 let option_uint256 = @option_value Uint256
-
-let bn_to_uint =
-  fun (block_number: BNum) =>
-  let int_block = builtin bsub block_number zerobn in
-  let some_int_block = builtin to_uint256 int_block in
-    option_uint256 zero256 some_int_block
 
 let zlp_to_blocks =
     fun (amount: Uint128) =>
@@ -52,27 +40,19 @@ type AD =
 
 (* Error events *)
 type Error =
-  | CodeIsNotZLPContract
   | CodeNotContractOwner
   | CodeOnPause
   | CodeNotValidator
-  | CodeDoesNotExists
-  | CodeNotFound
   | CodeInsufficientZLPAmount
-  | CodeAlreadyExists
 
 let make_error =
   fun (result : Error) =>
     let result_code =
       match result with
-      | CodeIsNotZLPContract      => Int32 -1
-      | CodeNotContractOwner      => Int32 -2
-      | CodeOnPause               => Int32 -3
-      | CodeNotValidator          => Int32 -4
-      | CodeDoesNotExists         => Int32 -5
-      | CodeNotFound              => Int32 -6
-      | CodeInsufficientZLPAmount => Int32 -7
-      | CodeAlreadyExists         => Int32 -8
+      | CodeNotContractOwner      => Int32 -1
+      | CodeOnPause               => Int32 -2
+      | CodeNotValidator          => Int32 -3
+      | CodeInsufficientZLPAmount => Int32 -4
       end
     in
     { _exception : "Error"; code : result_code }
