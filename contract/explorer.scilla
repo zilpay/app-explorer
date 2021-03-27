@@ -48,7 +48,7 @@ contract ZilPayExplorer
 (* Mutable fields *)
 field pause: Bool = False
 
-field app_list: Map ByStr20 App = Emp ByStr20 App
+field app_list : Map Uint32 (Map ByStr20 App) = Emp Uint32 (Map ByStr20 App)
 field ad_list: Map ByStr20 AD = Emp ByStr20 AD
 
 field validator_contract: ByStr20 = zero_address
@@ -67,17 +67,6 @@ procedure IsValidator()
   | True =>
   | False =>
     err = CodeNotValidator;
-    ThrowError err
-  end
-end
-
-procedure IsAlreadyExistsApp(app_owner: ByStr20)
-  is_app <- exists app_list[app_owner];
-
-  match is_app with
-  | False =>
-  | True =>
-    err = CodeAlreadyExists;
     ThrowError err
   end
 end
@@ -111,25 +100,6 @@ procedure IsContractOwner()
   | True => 
   | False =>
     err = CodeNotContractOwner;
-    ThrowError err
-  end
-end
-
-procedure RemoveApp(app_owner: ByStr20)
-  some_app <- app_list[app_owner];
-
-  match some_app with
-  | Some app =>
-    delete app_list[app_owner];
-
-    e = {
-      _eventname : "AppRemoveEvent";
-      removed_app: app;
-      app_owner: app_owner
-    };
-    event e
-  | None =>
-    err = CodeNotFound;
     ThrowError err
   end
 end
@@ -186,10 +156,14 @@ transition ConfigureValidator(address: ByStr20)
   event e
 end
 
-transition RemoveAppList(app_owners: List ByStr20)
+procedure RemoveApp(category: Uint32, app_owner: ByStr20)
   IsContractOwner;
+  delete app_list[category][app_owner];
 
-  forall app_owners RemoveApp
+  e = {
+    _eventname : "AppRemoveEvent";
+    app_owner: app_owner
+  }
 end
 
 transition RemoveADList(ad_owners: List ByStr20)
@@ -202,16 +176,18 @@ end
 (* validator transitions *)
 transition AddApplication(app: App, owner: ByStr20)
   IsValidator;
-  IsAlreadyExistsApp owner;
 
-  app_list[owner] := app;
+  match app with
+  | App t d u im ic category =>
+    app_list[category][owner] := app;
 
-  e = {
-    _eventname : "AddedAppEvent";
-    added_app: app;
-    onwer: owner
-  };
-  event e
+    e = {
+      _eventname : "AddedAppEvent";
+      added_app: app;
+      onwer: owner
+    };
+    event e
+  end
 end
 
 transition AddBanner(ad: AD, owner: ByStr20)

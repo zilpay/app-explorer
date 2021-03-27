@@ -292,7 +292,6 @@ end
 (* Admin transitions *)
 
 (* User transitions *)
-
 transition AddApp(title: String, des_url: String, url: String, ipfs_image: List String, ipfs_icon: String, category: Uint32)
   CheckPause;
   CheckCategory category;
