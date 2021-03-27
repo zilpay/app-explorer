@@ -40,9 +40,9 @@ let bn_to_uint =
 type App =
 | App of String String String (List String) String Uint32
 
-(* Custom ADT storing - end_block_number, owner_of_app, ipfs_banner_url *)
+(* Custom ADT storing - end_block_number, url, ipfs_banner_url *)
 type AD =
-| AD of Uint256 ByStr20 String
+| AD of Uint256 String String
 
 (* Error events *)
 type Error =
@@ -225,12 +225,12 @@ procedure ValidationADSuccess(ad_owner: ByStr20)
   match some_confirmed_ad with
   | Some confirmed_ad =>
     match confirmed_ad with
-    | AD block owner url =>
+    | AD block url banner =>
       delete wait_ad_list[ad_owner];
 
       block_256 = bn_to_uint current_block;
       end_block = builtin add block_256 block;
-      new_add = AD end_block owner url;
+      new_add = AD end_block url banner;
 
       SendAD new_add ad_owner;
 

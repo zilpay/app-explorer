@@ -34,9 +34,9 @@ let zlp_to_blocks =
 type App =
 | App of String String String (List String) String Uint32
 
-(* Custom ADT storing - end_block_number, owner_of_app, ipfs_banner_url *)
+(* Custom ADT storing - end_block_number, url, ipfs_banner_url *)
 type AD =
-| AD of Uint256 ByStr20 String
+| AD of Uint256 String String
 
 (* Error events *)
 type Error =
@@ -44,6 +44,7 @@ type Error =
   | CodeOnPause
   | CodeNotValidator
   | CodeInsufficientZLPAmount
+  | CodeIncorrectCategory
 
 let make_error =
   fun (result : Error) =>
@@ -53,6 +54,7 @@ let make_error =
       | CodeOnPause               => Int32 -2
       | CodeNotValidator          => Int32 -3
       | CodeInsufficientZLPAmount => Int32 -4
+      | CodeIncorrectCategory     => Int32 -5
       end
     in
     { _exception : "Error"; code : result_code }
@@ -69,6 +71,7 @@ contract ZilPayManager
 
 (* Mutable fields *)
 field pause: Bool = False
+field max_category: Uint32 = Uint32 6
 
 field min_price_for_ad: Uint128 = Uint128 2000000000000000000
 field price_for_app: Uint128 = Uint128 0
@@ -119,6 +122,19 @@ procedure CheckPause()
   end
 end
 
+procedure CheckCategory(category: Uint32)
+  max <- max_category;
+
+  is_valid = builtin lt max category;
+
+  match is_valid with
+  | True =>
+    err = CodeIncorrectCategory;
+    ThrowError err
+  | False =>
+  end
+end
+
 procedure IsContractOwner()
   is_contract_owner = builtin eq contract_owner _sender;
 
@@ -155,7 +171,7 @@ end
 procedure SendAppToCheck(app: App)
   recipient <- contract_validator;
 
-  call_accept_zlp = {
+  call_add_app = {
     _tag: "AddApp";
     _recipient: recipient;
     _amount: Uint128 0;
@@ -163,7 +179,7 @@ procedure SendAppToCheck(app: App)
     owner: _sender
   };
 
-  msgs = one_msg call_accept_zlp;
+  msgs = one_msg call_add_app;
 
   send msgs
 end
@@ -171,7 +187,7 @@ end
 procedure SendADToCheck(ad: AD, owner: ByStr20)
   recipient <- contract_validator;
 
-  call_accept_zlp = {
+  call_add_ad = {
     _tag: "AddAD";
     _recipient: recipient;
     _amount: Uint128 0;
@@ -179,7 +195,7 @@ procedure SendADToCheck(ad: AD, owner: ByStr20)
     owner: owner
   };
 
-  msgs = one_msg call_accept_zlp;
+  msgs = one_msg call_add_ad;
 
   send msgs
 end
@@ -201,6 +217,18 @@ transition ConfigurePause()
   e = {
     _eventname : "ContractPauseEvent";
     pause: new_pause
+  };
+  event e
+end
+
+transition ConfigureCategory(value: Uint32)
+  IsContractOwner;
+
+  max_category := value;
+
+  e = {
+    _eventname : "ConfigureCategoryEvent";
+    max_category: value
   };
   event e
 end
@@ -264,29 +292,21 @@ end
 (* Admin transitions *)
 
 (* User transitions *)
-transition AddApp(app: App)
+
+transition AddApp(title: String, des_url: String, url: String, ipfs_image: List String, ipfs_icon: String, category: Uint32)
   CheckPause;
+  CheckCategory category;
 
   price <- price_for_app;
 
   AcceptZLP price _sender;
 
-  SendAppToCheck app
-end
-
-transition DEVAddApp(title: String, ipfs_description: String, url: String, ipfs_image: List String, ipfs_icon: String, category: Uint32)
-  CheckPause;
-
-  price <- price_for_app;
-
-  AcceptZLP price _sender;
-
-  new_app = App title ipfs_description url ipfs_image ipfs_icon category;
+  new_app = App title des_url url ipfs_image ipfs_icon category;
 
   SendAppToCheck new_app
 end
 
-transition AddAD(amountZLP: Uint128, app_owner: ByStr20, url: String)
+transition AddAD(amountZLP: Uint128, url: String, banner_url: String)
   CheckPause;
   CheckPriceForAD amountZLP;
   AcceptZLP amountZLP _sender;
@@ -294,8 +314,8 @@ transition AddAD(amountZLP: Uint128, app_owner: ByStr20, url: String)
   decimal <- block_decimal;
 
   zlp_to_blocks = zlp_to_blocks amountZLP decimal;
-  new_ad = AD zlp_to_blocks app_owner url;
+  new_ad = AD zlp_to_blocks url banner_url;
 
-  SendADToCheck new_ad app_owner
+  SendADToCheck new_ad _sender
 end
 (* User transitions *)

@@ -14,9 +14,9 @@ let one_msg =
 type App =
 | App of String String String (List String) String Uint32
 
-(* Custom ADT storing - end_block_number, owner_of_app, ipfs_banner_url *)
+(* Custom ADT storing - end_block_number, url, ipfs_banner_url *)
 type AD =
-| AD of Uint256 ByStr20 String
+| AD of Uint256 String String
 
 (* Error events *)
 type Error =
