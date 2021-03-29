@@ -156,7 +156,7 @@ transition ConfigureValidator(address: ByStr20)
   event e
 end
 
-procedure RemoveApp(category: Uint32, app_owner: ByStr20)
+transition RemoveApp(category: Uint32, app_owner: ByStr20)
   IsContractOwner;
   delete app_list[category][app_owner];
 
