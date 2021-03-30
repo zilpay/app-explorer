@@ -157,7 +157,7 @@ transition ConfigureValidator(address: ByStr20)
 end
 
 transition RemoveApp(category: Uint32, app_owner: ByStr20)
-  IsContractOwner;
+  IsValidator;
   delete app_list[category][app_owner];
 
   e = {
@@ -167,7 +167,7 @@ transition RemoveApp(category: Uint32, app_owner: ByStr20)
 end
 
 transition RemoveADList(ad_owners: List ByStr20)
-  IsContractOwner;
+  IsValidator;
 
   forall ad_owners RemoveAD
 end
