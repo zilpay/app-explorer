@@ -385,6 +385,16 @@ transition ConfigureManager(new_manager: ByStr20)
   };
   event e
 end
+
+transition RemoveValidator(validator: ByStr20)
+  IsContractOwner;
+
+  some_amount <- validator_list[validator];
+
+  amount = option_uint128 zero128 some_amount;
+
+  WithdrawZLP validator
+end
 (* Admin transitions *)
 
 (* Validator transitions *)
