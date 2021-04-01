@@ -78,8 +78,6 @@ let make_error =
     { _exception : "Error"; code : result_code }
 
 contract ZilPayValidator
-
-(*  Parameters *)
 (
   contract_owner: ByStr20,
   explorer: ByStr20,
@@ -89,6 +87,7 @@ contract ZilPayValidator
 (* Mutable fields *)
 field pause: Bool = False
 field min_stake_amount: Uint128 = zero128
+field max_validators: Uint128 = Uint128 3
 
 field wait_list_app: Map ByStr20 App = Emp ByStr20 App
 field wait_ad_list: Map ByStr20 AD = Emp ByStr20 AD
@@ -96,7 +95,7 @@ field wait_ad_list: Map ByStr20 AD = Emp ByStr20 AD
 field manager: ByStr20 = zero_address
 
 field operators: Map ByStr20 ByStr20 = Emp ByStr20 ByStr20
-field validator_list: Map ByStr20 Uint128 = Emp ByStr20 Uint128
+field holder_list: Map ByStr20 Uint128 = Emp ByStr20 Uint128
 
 (* Emit Errors *)
 procedure ThrowError(err : Error)
@@ -105,12 +104,12 @@ procedure ThrowError(err : Error)
 end
 
 procedure IsValidator()
-  is_validator <- exists validator_list[_sender];
+  is_validator <- exists holder_list[_sender];
 
   match is_validator with
   | True =>
   | False =>
-    err = CodeInsufficientAmount;
+    err = CodeNotValidator;
     ThrowError err
   end
 end
@@ -160,7 +159,7 @@ procedure isOwnerOrOperator(to: ByStr20)
 end
 
 procedure CanValidate()
-  some_amount <- validator_list[_sender];
+  some_amount <- holder_list[_sender];
   min_amount <- min_stake_amount;
 
   amount = option_uint128 zero128 some_amount;
@@ -168,7 +167,7 @@ procedure CanValidate()
 
   match is_min_staked with
   | True =>
-    err = CodeInsufficientAmount;
+    err = CodeNotValidator;
     ThrowError err
   | False =>
   end
@@ -196,13 +195,13 @@ procedure IsContractOwner()
 end
 
 procedure UpdateZLP(operation: Operation, address: ByStr20, amount: Uint128)
-  some_to_count <- validator_list[address];
+  some_to_count <- holder_list[address];
   current_count = option_uint128 zero128 some_to_count;
 
   match operation with
   | Add =>
     new_to_count = builtin add current_count amount;
-    validator_list[address] := new_to_count;
+    holder_list[address] := new_to_count;
     e = {
       _eventname : "AddedValidatorEvent";
       address: address
@@ -213,7 +212,7 @@ procedure UpdateZLP(operation: Operation, address: ByStr20, amount: Uint128)
     match is_insufficient with
       | False => 
         new_to_count = builtin sub current_count amount;
-        validator_list[address] := new_to_count
+        holder_list[address] := new_to_count
       | True =>
         err = CodeInsufficientAmount;
         ThrowError err
@@ -258,16 +257,12 @@ procedure SendApp(app: App, owner: ByStr20)
 end
 
 procedure WithdrawZLP(to: ByStr20)
-  some_balance <- validator_list[to];
+  some_balance <- holder_list[to];
 
-  match some_balance with
-  | Some balance =>
-    UpdateZLP sub_operation to balance;
-    CallTransfer to balance
-  | None =>
-    err = CodeInsufficientAmount;
-    ThrowError err
-  end
+  balance = option_uint128 zero128 some_balance;
+
+  UpdateZLP sub_operation to balance;
+  CallTransfer to balance
 end
 
 procedure ValidationADReject(app_owner: ByStr20)
@@ -374,6 +369,18 @@ transition ConfigureMinStake(value: Uint128)
   event e
 end
 
+transition ConfigureMaxValidators(value: Uint128)
+  IsContractOwner;
+
+  max_validators := value;
+
+  e = {
+    _eventname : "ConfigureMaxValidatorsEvent";
+    max_validators: value
+  };
+  event e
+end
+
 transition ConfigureManager(new_manager: ByStr20)
   IsContractOwner;
 
@@ -389,11 +396,49 @@ end
 transition RemoveValidator(validator: ByStr20)
   IsContractOwner;
 
-  some_amount <- validator_list[validator];
+  some_amount <- holder_list[validator];
 
   amount = option_uint128 zero128 some_amount;
 
   WithdrawZLP validator
+end
+
+transition WithdrawSelf()
+  IsContractOwner;
+
+  some_balance <- holder_list[_this_address];
+
+  balance = option_uint128 zero128 some_balance;
+
+  UpdateZLP sub_operation _this_address balance;
+  CallTransfer contract_owner balance
+end
+
+transition RemoveADList(ad_owners: List ByStr20)
+  IsContractOwner;
+
+  msg = {
+    _tag : "RemoveADList";
+    _recipient: explorer;
+    _amount: Uint128 0;
+    ad_owners: ad_owners
+  };
+  msgs = one_msg msg;
+  send msgs
+end
+
+transition RemoveApp(category: Uint32, app_owner: ByStr20)
+  IsContractOwner;
+
+  msg = {
+    _tag : "RemoveApp";
+    _recipient: explorer;
+    _amount: Uint128 0;
+    category: category;
+    app_owner: app_owner
+  };
+  msgs = one_msg msg;
+  send msgs
 end
 (* Admin transitions *)
 
@@ -428,37 +473,6 @@ transition ADRejectList(ad_owners: List ByStr20)
   CanValidate;
 
   forall ad_owners ValidationADReject
-end
-
-transition RemoveApp(category: Uint32, app_owner: ByStr20)
-  CheckPause;
-  IsValidator;
-  CanValidate;
-
-  msg = {
-    _tag : "RemoveApp";
-    _recipient: explorer;
-    _amount: Uint128 0;
-    category: category;
-    app_owner: app_owner
-  };
-  msgs = one_msg msg;
-  send msgs
-end
-
-transition RemoveADList(ad_owners: List ByStr20)
-  CheckPause;
-  IsValidator;
-  CanValidate;
-
-  msg = {
-    _tag : "RemoveADList";
-    _recipient: explorer;
-    _amount: Uint128 0;
-    ad_owners: ad_owners
-  };
-  msgs = one_msg msg;
-  send msgs
 end
 
 transition WithdrawTokens(to: ByStr20)
@@ -506,16 +520,21 @@ end
 
 transition RecipientAcceptTransferFrom(initiator: ByStr20, sender: ByStr20, recipient: ByStr20, amount: Uint128)
   IsZLP;
-  UpdateZLP add_operation sender amount;
 
-  operators[sender] := initiator
+  address_manager <- manager;
+
+  is_manager = builtin eq address_manager initiator;
+
+  match is_manager with
+  | True => 
+    UpdateZLP add_operation recipient amount
+  | False =>
+    UpdateZLP add_operation sender amount;
+    operators[sender] := initiator
+  end
 end
 
 transition TransferFromSuccessCallBack(initiator: ByStr20, sender: ByStr20, recipient: ByStr20, amount: Uint128)
-  IsZLP;
-  UpdateZLP add_operation sender amount;
-
-  operators[sender] := initiator
 end
 
 transition TransferSuccessCallBack(sender: ByStr20, recipient: ByStr20, amount: Uint128)
