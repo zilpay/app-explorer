@@ -28,6 +28,14 @@ let option_value =
 let option_uint256 = @option_value Uint256
 let option_uint128 = @option_value Uint128
 
+let percent_of_amount =
+  fun (percent: Uint128) =>
+  fun (amount: Uint128)  =>
+    let n_100 = Uint128 100 in
+    let value = builtin mul amount percent in
+      builtin div value n_100
+
+
 let bn_to_uint =
   fun (block_number: BNum) =>
   let int_block = builtin bsub block_number zerobn in
@@ -88,9 +96,11 @@ contract ZilPayValidator
 field pause: Bool = False
 field min_stake_amount: Uint128 = zero128
 field max_validators: Uint128 = Uint128 3
+field rewards_fee: Uint128 = Uint128 10
 
 field wait_list_app: Map ByStr20 App = Emp ByStr20 App
 field wait_ad_list: Map ByStr20 AD = Emp ByStr20 AD
+field ad_amount_list: Map ByStr20 Uint128 = Emp ByStr20 Uint128
 
 field manager: ByStr20 = zero_address
 
@@ -158,16 +168,14 @@ procedure isOwnerOrOperator(to: ByStr20)
   end
 end
 
-procedure CanValidate()
-  some_amount <- holder_list[_sender];
+procedure CheckAmount(amount: Uint128)
   min_amount <- min_stake_amount;
 
-  amount = option_uint128 zero128 some_amount;
   is_min_staked = builtin lt amount min_amount;
 
   match is_min_staked with
   | True =>
-    err = CodeNotValidator;
+    err = CodeInsufficientAmount;
     ThrowError err
   | False =>
   end
@@ -232,6 +240,25 @@ procedure CallTransfer(to: ByStr20, amount: Uint128)
   send msgs
 end
 
+procedure ValidationRewards(amount: Uint128)
+  percent <- rewards_fee;
+  some_holder_amount <- holder_list[_sender];
+  some_self_balance <- holder_list[_this_address];
+
+  staked = option_uint128 zero128 some_holder_amount;
+  self_balance = option_uint128 zero128 some_self_balance;
+  rewards = percent_of_amount percent amount;
+
+  is_zero = builtin eq self_balance zero128;
+
+  match is_zero with
+  | False =>
+    UpdateZLP sub_operation _this_address rewards;
+    UpdateZLP add_operation _sender rewards
+  | True => (* Nope *)
+  end
+end
+
 procedure SendAD(ad: AD, owner: ByStr20)
   msg = {
     _tag : "AddBanner";
@@ -265,25 +292,43 @@ procedure WithdrawZLP(to: ByStr20)
   CallTransfer to balance
 end
 
-procedure ValidationADReject(app_owner: ByStr20)
-  delete wait_ad_list[app_owner];
+procedure ValidationADReject(ad_owner: ByStr20)
+  some_amount <- ad_amount_list[ad_owner];
+
+  amount = option_uint128 zero128 some_amount;
+
+  ValidationRewards amount;
+
+  some_amount <- ad_amount_list[ad_owner];
+  amount = option_uint128 zero128 some_amount;
+
+  CallTransfer ad_owner amount;
+
+  delete wait_ad_list[ad_owner];
+  delete ad_amount_list[ad_owner];
 
   e = {
     _eventname : "ValidationADRejectEvent";
-    app_owner: app_owner
+    ad_owner: ad_owner
   };
   event e
 end
 
 procedure ValidationADSuccess(ad_owner: ByStr20)
   some_confirmed_ad <- wait_ad_list[ad_owner];
+  some_amount <- ad_amount_list[ad_owner];
   current_block <- & BLOCKNUMBER;
 
   match some_confirmed_ad with
   | Some confirmed_ad =>
     match confirmed_ad with
     | AD block url banner =>
+      amount = option_uint128 zero128 some_amount;
+
+      ValidationRewards amount;
+
       delete wait_ad_list[ad_owner];
+      delete ad_amount_list[ad_owner];
 
       block_256 = bn_to_uint current_block;
       end_block = builtin add block_256 block;
@@ -446,7 +491,6 @@ end
 transition AppSuccessList(app_owners: List ByStr20)
   CheckPause;
   IsValidator;
-  CanValidate;
 
   forall app_owners ValidationAppSuccess
 end
@@ -454,7 +498,6 @@ end
 transition AppRejectList(app_owners: List ByStr20)
   CheckPause;
   IsValidator;
-  CanValidate;
 
   forall app_owners ValidationAppReject
 end
@@ -462,7 +505,6 @@ end
 transition ADSuccessList(ad_owners: List ByStr20)
   CheckPause;
   IsValidator;
-  CanValidate;
 
   forall ad_owners ValidationADSuccess
 end
@@ -470,7 +512,6 @@ end
 transition ADRejectList(ad_owners: List ByStr20)
   CheckPause;
   IsValidator;
-  CanValidate;
 
   forall ad_owners ValidationADReject
 end
@@ -497,16 +538,18 @@ transition AddApp(app: App, owner: ByStr20)
   event e
 end
 
-transition AddAD(ad: AD, owner: ByStr20)
+transition AddAD(ad: AD, owner: ByStr20, amount: Uint128)
   CheckPause;
   IsManager;
 
   wait_ad_list[owner] := ad;
+  ad_amount_list[owner] := amount;
 
   e = {
     _eventname : "AddedADEvent";
     ad: ad;
-    onwer: owner
+    onwer: owner;
+    amount: amount
   };
   event e
 end
@@ -515,6 +558,7 @@ end
 (* Callbacks *)
 transition RecipientAcceptTransfer(sender: ByStr20, recipient: ByStr20, amount: Uint128)
   IsZLP;
+  CheckAmount amount;
   UpdateZLP add_operation sender amount
 end
 
@@ -529,6 +573,7 @@ transition RecipientAcceptTransferFrom(initiator: ByStr20, sender: ByStr20, reci
   | True => 
     UpdateZLP add_operation recipient amount
   | False =>
+    CheckAmount amount;
     UpdateZLP add_operation sender amount;
     operators[sender] := initiator
   end
