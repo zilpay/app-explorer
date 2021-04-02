@@ -240,21 +240,24 @@ procedure CallTransfer(to: ByStr20, amount: Uint128)
   send msgs
 end
 
-procedure ValidationRewards(amount: Uint128)
+procedure ValidationRewards(ad_owner: ByStr20)
+  some_amount <- ad_amount_list[ad_owner];
   percent <- rewards_fee;
   some_holder_amount <- holder_list[_sender];
   some_self_balance <- holder_list[_this_address];
 
+  amount = option_uint128 zero128 some_amount;
   staked = option_uint128 zero128 some_holder_amount;
   self_balance = option_uint128 zero128 some_self_balance;
   rewards = percent_of_amount percent amount;
-
   is_zero = builtin eq self_balance zero128;
+  new_ad_amount = builtin sub amount rewards;
+
+  ad_amount_list[ad_owner] := new_ad_amount;
 
   e = {
-    _eventname : "ValidationRewards";
-    rewards: rewards;
-    self_balance: self_balance
+    _eventname : "ValidationRewardsEvent";
+    rewards: rewards
   };
 
   event e;
@@ -296,20 +299,19 @@ procedure WithdrawZLP(to: ByStr20)
 
   balance = option_uint128 zero128 some_balance;
 
+  delete holder_list[to];
+
   UpdateZLP sub_operation to balance;
   CallTransfer to balance
 end
 
 procedure ValidationADReject(ad_owner: ByStr20)
-  some_amount <- ad_amount_list[ad_owner];
-
-  amount = option_uint128 zero128 some_amount;
-
-  ValidationRewards amount;
+  ValidationRewards ad_owner;
 
   some_amount <- ad_amount_list[ad_owner];
   amount = option_uint128 zero128 some_amount;
 
+  UpdateZLP sub_operation _this_address amount;
   CallTransfer ad_owner amount;
 
   delete wait_ad_list[ad_owner];
@@ -324,16 +326,13 @@ end
 
 procedure ValidationADSuccess(ad_owner: ByStr20)
   some_confirmed_ad <- wait_ad_list[ad_owner];
-  some_amount <- ad_amount_list[ad_owner];
   current_block <- & BLOCKNUMBER;
 
   match some_confirmed_ad with
   | Some confirmed_ad =>
     match confirmed_ad with
     | AD block url banner =>
-      amount = option_uint128 zero128 some_amount;
-
-      ValidationRewards amount;
+      ValidationRewards ad_owner;
 
       delete wait_ad_list[ad_owner];
       delete ad_amount_list[ad_owner];
