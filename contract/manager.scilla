@@ -64,7 +64,7 @@ contract ZilPayManager
 (*  Parameters *)
 (
   contract_owner: ByStr20,
-  proxy_zlp: ByStr20,
+  zlp: ByStr20,
   validator: ByStr20
 )
 
@@ -77,7 +77,6 @@ field min_price_for_ad: Uint128 = Uint128 2000000000000000000
 field price_for_app: Uint128 = Uint128 0
 field block_decimal: Uint256 = Uint256 2000000000000000000
 
-field contract_proxy_zlp: ByStr20 = proxy_zlp
 field contract_validator: ByStr20 = validator
 
 (* Emit Errors *)
@@ -146,22 +145,23 @@ procedure IsContractOwner()
   end
 end
 
-procedure AcceptZLP(amount: Uint128, from: ByStr20)
+procedure TransferFrom(amount: Uint128, from: ByStr20)
   is_zero = builtin eq zero128 amount;
 
   match is_zero with
   | False =>
-    proxy_zlp_address <- contract_proxy_zlp;
+    validator <- contract_validator;
 
-    call_accept_zlp = {
-      _tag: "AcceptZLP";
-      _recipient: proxy_zlp_address;
+    call_transfer_zlp = {
+      _tag: "TransferFrom";
+      _recipient: zlp;
       _amount: Uint128 0;
       from: from;
+      to: validator;
       amount: amount
     };
 
-    msgs = one_msg call_accept_zlp;
+    msgs = one_msg call_transfer_zlp;
 
     send msgs
   | True =>
@@ -184,7 +184,7 @@ procedure SendAppToCheck(app: App)
   send msgs
 end
 
-procedure SendADToCheck(ad: AD, owner: ByStr20)
+procedure SendADToCheck(ad: AD, owner: ByStr20, amount: Uint128)
   recipient <- contract_validator;
 
   call_add_ad = {
@@ -192,7 +192,8 @@ procedure SendADToCheck(ad: AD, owner: ByStr20)
     _recipient: recipient;
     _amount: Uint128 0;
     ad: ad;
-    owner: owner
+    owner: owner;
+    amount: amount
   };
 
   msgs = one_msg call_add_ad;
@@ -274,21 +275,6 @@ transition ConfigureAppPrice(new_price: Uint128)
   };
   event e
 end
-
-transition ConfigureProxyZLP(contractAddr: ByStr20)
-  IsContractOwner;
-
-  old_proxy_zlp <- contract_proxy_zlp;
-
-  contract_proxy_zlp := contractAddr;
-
-  e = {
-    _eventname : "ConfigureProxyZLPEvent";
-    new_proxy_zlp: contractAddr;
-    old_proxy_zlp: old_proxy_zlp
-  };
-  event e
-end
 (* Admin transitions *)
 
 (* User transitions *)
@@ -298,7 +284,7 @@ transition AddApp(title: String, des_url: String, url: String, ipfs_image: List 
 
   price <- price_for_app;
 
-  AcceptZLP price _sender;
+  TransferFrom price _sender;
 
   new_app = App title des_url url ipfs_image ipfs_icon category;
 
@@ -308,13 +294,21 @@ end
 transition AddAD(amountZLP: Uint128, url: String, banner_url: String)
   CheckPause;
   CheckPriceForAD amountZLP;
-  AcceptZLP amountZLP _sender;
+  TransferFrom amountZLP _sender;
   
   decimal <- block_decimal;
 
   zlp_to_blocks = zlp_to_blocks amountZLP decimal;
   new_ad = AD zlp_to_blocks url banner_url;
 
-  SendADToCheck new_ad _sender
+  SendADToCheck new_ad _sender amountZLP
 end
 (* User transitions *)
+
+(* Callbacks *)
+transition TransferFromSuccessCallBack(initiator: ByStr20, sender: ByStr20, recipient: ByStr20, amount: Uint128)
+end
+
+transition TransferSuccessCallBack(sender: ByStr20, recipient: ByStr20, amount: Uint128)
+end
+(* Callbacks *)

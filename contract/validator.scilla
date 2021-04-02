@@ -251,6 +251,14 @@ procedure ValidationRewards(amount: Uint128)
 
   is_zero = builtin eq self_balance zero128;
 
+  e = {
+    _eventname : "ValidationRewards";
+    rewards: rewards;
+    self_balance: self_balance
+  };
+
+  event e;
+
   match is_zero with
   | False =>
     UpdateZLP sub_operation _this_address rewards;
@@ -438,14 +446,14 @@ transition ConfigureManager(new_manager: ByStr20)
   event e
 end
 
-transition RemoveValidator(validator: ByStr20)
+transition RemoveValidator(address: ByStr20)
   IsContractOwner;
 
-  some_amount <- holder_list[validator];
+  some_amount <- holder_list[address];
 
   amount = option_uint128 zero128 some_amount;
 
-  WithdrawZLP validator
+  WithdrawZLP address
 end
 
 transition WithdrawSelf()
@@ -528,14 +536,7 @@ transition AddApp(app: App, owner: ByStr20)
   CheckPause;
   IsManager;
 
-  wait_list_app[owner] := app;
-
-  e = {
-    _eventname : "AddedAppEvent";
-    added_app: app;
-    onwer: owner
-  };
-  event e
+  wait_list_app[owner] := app
 end
 
 transition AddAD(ad: AD, owner: ByStr20, amount: Uint128)
@@ -543,15 +544,7 @@ transition AddAD(ad: AD, owner: ByStr20, amount: Uint128)
   IsManager;
 
   wait_ad_list[owner] := ad;
-  ad_amount_list[owner] := amount;
-
-  e = {
-    _eventname : "AddedADEvent";
-    ad: ad;
-    onwer: owner;
-    amount: amount
-  };
-  event e
+  ad_amount_list[owner] := amount
 end
 (* manager transitions *)
 
