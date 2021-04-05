@@ -11,6 +11,8 @@ let zero256 = Uint256 0
 let zero128 = Uint128 0
 let zerobn = BNum 0
 
+let one128 = Uint128 1
+
 let one_msg =
   fun (msg: Message) =>
     let nil_msg = Nil {Message} in
@@ -95,7 +97,6 @@ contract ZilPayValidator
 (* Mutable fields *)
 field pause: Bool = False
 field min_stake_amount: Uint128 = zero128
-field max_validators: Uint128 = Uint128 3
 field rewards_fee: Uint128 = Uint128 10
 
 field wait_list_app: Map ByStr20 App = Emp ByStr20 App
@@ -106,6 +107,7 @@ field manager: ByStr20 = zero_address
 
 field operators: Map ByStr20 ByStr20 = Emp ByStr20 ByStr20
 field holder_list: Map ByStr20 Uint128 = Emp ByStr20 Uint128
+field total_validators: Uint128 = zero128
 
 (* Emit Errors *)
 procedure ThrowError(err : Error)
@@ -202,29 +204,21 @@ procedure IsContractOwner()
   end
 end
 
-procedure UpdateZLP(operation: Operation, address: ByStr20, amount: Uint128)
-  some_to_count <- holder_list[address];
-  current_count = option_uint128 zero128 some_to_count;
-
+procedure UpdateZLP(operation: Operation, address: ByStr20, amount: Uint128, current_count: Uint128)
   match operation with
   | Add =>
     new_to_count = builtin add current_count amount;
-    holder_list[address] := new_to_count;
-    e = {
-      _eventname : "AddedValidatorEvent";
-      address: address
-    };
-    event e
+    holder_list[address] := new_to_count
   | Sub =>
-    is_insufficient = builtin lt current_count amount;
-    match is_insufficient with
-      | False => 
-        new_to_count = builtin sub current_count amount;
-        holder_list[address] := new_to_count
-      | True =>
-        err = CodeInsufficientAmount;
-        ThrowError err
-      end
+    new_to_count = builtin sub current_count amount;
+    is_zero = builtin eq new_to_count zero128;
+
+    match is_zero with
+    | True =>
+      delete holder_list[address]
+    | False =>
+      holder_list[address] := new_to_count
+    end
   end
 end
 
@@ -264,8 +258,7 @@ procedure ValidationRewards(ad_owner: ByStr20)
 
   match is_zero with
   | False =>
-    UpdateZLP sub_operation _this_address rewards;
-    UpdateZLP add_operation _sender rewards
+    UpdateZLP add_operation _sender rewards staked
   | True => (* Nope *)
   end
 end
@@ -296,12 +289,14 @@ end
 
 procedure WithdrawZLP(to: ByStr20)
   some_balance <- holder_list[to];
+  validators <- total_validators;
 
   balance = option_uint128 zero128 some_balance;
+  new_validators = builtin sub validators one128;
 
-  delete holder_list[to];
+  total_validators := new_validators;
 
-  UpdateZLP sub_operation to balance;
+  UpdateZLP sub_operation to balance balance;
   CallTransfer to balance
 end
 
@@ -309,9 +304,9 @@ procedure ValidationADReject(ad_owner: ByStr20)
   ValidationRewards ad_owner;
 
   some_amount <- ad_amount_list[ad_owner];
+
   amount = option_uint128 zero128 some_amount;
 
-  UpdateZLP sub_operation _this_address amount;
   CallTransfer ad_owner amount;
 
   delete wait_ad_list[ad_owner];
@@ -421,18 +416,6 @@ transition ConfigureMinStake(value: Uint128)
   event e
 end
 
-transition ConfigureMaxValidators(value: Uint128)
-  IsContractOwner;
-
-  max_validators := value;
-
-  e = {
-    _eventname : "ConfigureMaxValidatorsEvent";
-    max_validators: value
-  };
-  event e
-end
-
 transition ConfigureManager(new_manager: ByStr20)
   IsContractOwner;
 
@@ -462,7 +445,7 @@ transition WithdrawSelf()
 
   balance = option_uint128 zero128 some_balance;
 
-  UpdateZLP sub_operation _this_address balance;
+  UpdateZLP sub_operation _this_address balance balance;
   CallTransfer contract_owner balance
 end
 
@@ -551,7 +534,15 @@ end
 transition RecipientAcceptTransfer(sender: ByStr20, recipient: ByStr20, amount: Uint128)
   IsZLP;
   CheckAmount amount;
-  UpdateZLP add_operation sender amount
+
+  some_balance <- holder_list[sender];
+  validators <- total_validators;
+
+  balance = option_uint128 zero128 some_balance;
+  new_validators = builtin add validators one128;
+  total_validators := new_validators;
+
+  UpdateZLP add_operation sender amount balance
 end
 
 transition RecipientAcceptTransferFrom(initiator: ByStr20, sender: ByStr20, recipient: ByStr20, amount: Uint128)
@@ -562,12 +553,19 @@ transition RecipientAcceptTransferFrom(initiator: ByStr20, sender: ByStr20, reci
   is_manager = builtin eq address_manager initiator;
 
   match is_manager with
-  | True => 
-    UpdateZLP add_operation recipient amount
+  | True =>
   | False =>
+    validators <- total_validators;
+    some_balance <- holder_list[sender];
+
+    new_validators = builtin add validators one128;
+    balance = option_uint128 zero128 some_balance;
+
     CheckAmount amount;
-    UpdateZLP add_operation sender amount;
-    operators[sender] := initiator
+    UpdateZLP add_operation sender amount balance;
+
+    operators[sender] := initiator;
+    total_validators := new_validators
   end
 end
 
