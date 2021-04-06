@@ -15,13 +15,12 @@ type App =
 | App of String String String (List String) String Uint32
 
 (* Custom ADT storing - end_block_number, url, ipfs_banner_url *)
-type AD =
-| AD of Uint256 String String
+type Banner =
+| Banner of Uint256 String String
 
 (* Error events *)
 type Error =
   | CodeNotContractOwner
-  | CodeOnPause
   | CodeNotValidator
   | CodeNotFound
   | CodeAlreadyExists
@@ -31,10 +30,9 @@ let make_error =
     let result_code =
       match result with
       | CodeNotContractOwner      => Int32 -1
-      | CodeOnPause               => Int32 -2
-      | CodeNotValidator          => Int32 -3
-      | CodeNotFound              => Int32 -4
-      | CodeAlreadyExists         => Int32 -5
+      | CodeNotValidator          => Int32 -2
+      | CodeNotFound              => Int32 -3
+      | CodeAlreadyExists         => Int32 -4
       end
     in
     { _exception : "Error"; code : result_code }
@@ -46,10 +44,8 @@ contract ZilPayExplorer
 
 
 (* Mutable fields *)
-field pause: Bool = False
-
 field app_list : Map Uint32 (Map ByStr20 App) = Emp Uint32 (Map ByStr20 App)
-field ad_list: Map ByStr20 AD = Emp ByStr20 AD
+field ad_list: Map ByStr20 Banner = Emp ByStr20 Banner
 
 field validator_contract: ByStr20 = zero_address
 
@@ -79,17 +75,6 @@ procedure IsAlreadyExistsPoster(poster_owner: ByStr20)
   | True =>
     err = CodeAlreadyExists;
     ThrowError err
-  end
-end
-
-procedure CheckPause()
-  curent_pause <- pause;
-
-  match curent_pause with
-  | True =>
-    err = CodeOnPause;
-    ThrowError err
-  | False =>
   end
 end
 
@@ -125,26 +110,6 @@ end
 
 
 (* Admin transitions *)
-transition ConfigurePause()
-  IsContractOwner;
-  curent_pause <- pause;
-
-  new_pause = match curent_pause with
-  | True =>
-    False
-  | False =>
-    True
-  end;
-
-  pause := new_pause;
-
-  e = {
-    _eventname : "ContractPauseEvent";
-    pause: new_pause
-  };
-  event e
-end
-
 transition ConfigureValidator(address: ByStr20)
   IsContractOwner;
   validator_contract := address;
@@ -190,15 +155,15 @@ transition AddApplication(app: App, owner: ByStr20)
   end
 end
 
-transition AddBanner(ad: AD, owner: ByStr20)
+transition AddBanner(banner: Banner, owner: ByStr20)
   IsValidator;
   IsAlreadyExistsPoster owner;
 
-  ad_list[owner] := ad;
+  ad_list[owner] := banner;
 
   e = {
     _eventname : "AddedADEvent";
-    added_ad: ad;
+    added_banner: banner;
     onwer: owner
   };
   event e

@@ -24,6 +24,11 @@ type Operation =
   | Add
   | Sub
 
+type ValidatorOperation =
+  | Reject
+  | Approve
+  | NotEnough
+
 (* Error events *)
 type Error =
   | CodeNotContractOwner
@@ -34,10 +39,14 @@ type Error =
   | CodeNotZLP
   | CodeInsufficientAmount
   | CodeIsNotOwnerOrOperator
+  | CodeAlreadyVoted
+  | CodeAlreadyExists
 
-
+type Dummy =
+  | Dummy
+  
 let zero_address = 0x0000000000000000000000000000000000000000
-
+let verdad = Dummy
 (* Global variables *)
 let zero256 = Uint256 0
 let zero128 = Uint128 0
@@ -47,10 +56,6 @@ let zerobn  = BNum 0
 let one128  = Uint128 1
 let one32   = Uint32 1
 let two32   = Uint32 2
-let three32 = Uint32 3
-
-let tt = True
-let ff = False
 
 let one_msg =
   fun (msg: Message) =>
@@ -86,22 +91,6 @@ let update_tokens_count =
         builtin sub balance amount
       end
 
-let build_banner_msg =
-  fun (ad: Advertising) =>
-  fun (owner: ByStr20) =>
-  fun (explorer: ByStr20) =>
-    match ad with
-    | Advertising bn url ipfs rejected approve =>
-      let banner = Banner bn url ipfs in
-      {
-        _tag : "AddBanner";
-        _recipient: explorer;
-        _amount: Uint128 0;
-        banner: banner;
-        owner: owner
-      }
-    end
-
 let build_app_msg =
   fun (app: Application) =>
   fun (owner: ByStr20) =>
@@ -131,12 +120,12 @@ let is_approved_advertising =
       let count = builtin add rejected approve in
       let is_validated = builtin lt total count in
         match is_validated with
-          | False => zero32 (* Not enough vote *)
+          | False => NotEnough (* Not enough vote *)
           | True =>
             let is_approve = builtin lt rejected approve in
             match is_approve with
-            | False => one32 (* AD has rejected nby validators *)
-            | True => two32 (* AD has aproved by validators *)
+            | False => Reject (* AD has rejected nby validators *)
+            | True => Approve (* AD has aproved by validators *)
             end
         end
     end
@@ -145,7 +134,8 @@ let is_approved_advertising =
 (* return the new AD *)
 let validate_advertising =
   fun (ad: Advertising) =>
-  fun (is_approve: Bool) =>
+  fun (n: Uint32) =>
+    let is_approve = builtin eq n one32 in
     match ad with
     | Advertising bn url ipfs rejected approve =>
       match is_approve with
@@ -202,19 +192,30 @@ let percent_of_amount =
     let value = builtin mul amount percent in
       builtin div value n_100
 
-(* Calculate rewards of advertising amount *)
-let get_rewards =
-  fun (ad_amount: Uint128) =>
-  fun (percent: Uint128) =>
-  fun (balance: Uint128) =>
-    let rewards = percent_of_amount percent ad_amount in
-    builtin add rewards balance
-
 let bn_to_uint =
   fun (block_number: BNum) =>
   let int_block = builtin bsub block_number zerobn in
   let some_int_block = builtin to_uint256 int_block in
     option_uint256 zero256 some_int_block
+
+let build_banner_msg =
+  fun (ad: Advertising) =>
+  fun (owner: ByStr20) =>
+  fun (explorer: ByStr20) =>
+  fun (current_block: BNum) =>
+    match ad with
+    | Advertising block url ipfs rejected approve =>
+      let block_256 = bn_to_uint current_block in
+      let end_block = builtin add block_256 block in
+      let banner = Banner end_block url ipfs in
+      let msg = {
+        _tag : "AddBanner";
+        _recipient: explorer;
+        _amount: Uint128 0;
+        banner: banner;
+        owner: owner
+      } in one_msg msg
+    end
 
 let make_error =
   fun (result : Error) =>
@@ -228,6 +229,8 @@ let make_error =
       | CodeNotZLP                => Int32 -6
       | CodeInsufficientAmount    => Int32 -7
       | CodeIsNotOwnerOrOperator  => Int32 -8
+      | CodeAlreadyVoted          => Int32 -9
+      | CodeAlreadyExists         => Int32 -10
       end
     in
     { _exception : "Error"; code : result_code }
@@ -235,20 +238,23 @@ let make_error =
 contract ZilPayValidator
 (
   contract_owner: ByStr20,
+  explorer: ByStr20,
   zlp: ByStr20
 )
 
 (* Mutable fields *)
-field pause: Bool = False
+field is_pause: Uint32 = zero32
 field min_stake_amount: Uint128 = zero128
+field manager: ByStr20 = zero_address
 field rewards_fee: Uint128 = Uint128 10
 
 field advertiser_list: Map ByStr20 Uint128 = Emp ByStr20 Uint128
-
-field manager: ByStr20 = zero_address
+field wait_list_app: Map ByStr20 Application = Emp ByStr20 Application
+field wait_ad_list: Map ByStr20 Advertising = Emp ByStr20 Advertising
+field moderators_vote_list: Map ByStr20 (Map ByStr20 Dummy) = Emp ByStr20 (Map ByStr20 Dummy)
 
 field total_moderators: Uint32 = zero32
-field operators: Map ByStr20 ByStr20 = Emp ByStr20 ByStr20
+field operators: Map ByStr20 (Map ByStr20 Dummy) = Emp ByStr20 (Map ByStr20 Dummy)
 field holder_list: Map ByStr20 Uint128 = Emp ByStr20 Uint128
 
 (* Emit Errors *)
@@ -268,13 +274,79 @@ procedure IsZLP()
   end
 end
 
+procedure IsManager()
+  address_manager <- manager;
+
+  is_manager = builtin eq address_manager _sender;
+
+  match is_manager with
+  | True =>
+  | False =>
+    err = CodeNotManager;
+    ThrowError err
+  end
+end
+
+procedure IsValidator()
+  is_validator <- exists holder_list[_sender];
+
+  match is_validator with
+  | True =>
+  | False =>
+    err = CodeNotValidator;
+    ThrowError err
+  end
+end
+
+procedure CheckPause()
+  p <- is_pause;
+
+  on = builtin eq p one32;
+
+  match on with
+  | True =>
+    err = CodeOnPause;
+    ThrowError err
+  | False =>
+  end
+end
+
+procedure IsAlreadyVoted(owner: ByStr20)
+  is_voted <- exists moderators_vote_list[owner][_sender];
+
+  match is_voted with
+  | True =>
+    err = CodeAlreadyVoted;
+    ThrowError err
+  | False =>
+  end
+end
+
+procedure IsAlreadyAdvertising(owner: ByStr20)
+  is_ad <- exists wait_ad_list[owner];
+
+  match is_ad with
+  | True =>
+    err = CodeAlreadyExists;
+    ThrowError err
+  | False =>
+  end
+end
+
+procedure IsAlreadyApplication(owner: ByStr20)
+  is_app <- exists wait_list_app[owner];
+
+  match is_ad with
+  | True =>
+    err = CodeAlreadyExists;
+    ThrowError err
+  | False =>
+  end
+end
+
 procedure isOwnerOrOperator(to: ByStr20)
-  some_operator <- operators[_sender];
+  is_operator <- exists operators[to][_sender];
   is_owner <- exists holder_list[_sender];
-  is_operator = match some_operator with
-  | None => False
-  | Some owner => builtin eq to owner
-  end;
   is_allow = orb is_operator is_owner;
 
   match is_allow with
@@ -337,7 +409,14 @@ end
 procedure ConfigureAdvertiserBalance(address: ByStr20, amount: Uint128, operation: Operation)
   some_balance <- advertiser_list[address];
   new_balance = update_tokens_count amount some_balance operation;
-  advertiser_list[address] := new_balance
+  is_zero = builtin eq new_balance zero128;
+
+  match is_zero with
+  | False =>
+    advertiser_list[address] := new_balance
+  | True =>
+    delete advertiser_list[address]
+  end
 end
 
 procedure CallTransfer(to: ByStr20, amount: Uint128)
@@ -364,6 +443,32 @@ transition ConfigureManager(new_manager: ByStr20)
   };
   event e
 end
+
+transition ConfigurePause()
+  IsContractOwner;
+
+  p <- is_pause;
+
+  on = builtin eq p one32;
+
+  match on with
+  | True =>
+    is_pause := zero32
+  | False =>
+    is_pause := one32
+  end
+end
+
+transition WithdrawSelf(to: ByStr20)
+  IsContractOwner;
+
+  some_balance <- holder_list[_this_address];
+
+  balance = option_uint128 zero128 some_balance;
+
+  ConfigureValidatorBalance to balance sub_operation;
+  CallTransfer to balance
+end
 (* Onwer *)
 
 (* common *)
@@ -371,27 +476,88 @@ transition Withdraw(to: ByStr20)
   isOwnerOrOperator to;
   
   some_balance <- holder_list[to];
+  balance = option_uint128 zero128 some_balance;
 
-  match some_balance with
-  | Some balance =>
-    ConfigureValidatorBalance to balance sub_operation;
-    CallTransfer to balance;
+  ConfigureValidatorBalance to balance sub_operation;
+  ConfigureTotalValidators sub_operation;
+  CallTransfer to balance;
 
-    delete operators[_sender]
+  delete operators[to]
+end
+(* common *)
+
+(* moderator *)
+transition ApproveAdvertising(owner: ByStr20, approved: Uint32)
+  CheckPause;
+  IsValidator;
+  IsAlreadyVoted owner;
+
+  some_ad <- wait_ad_list[owner];
+
+  match some_ad with
+  | Some ad =>
+    some_advertiser_amount <- advertiser_list[owner];
+    fee <- rewards_fee;
+    total <- total_moderators;
+
+    new_ad = validate_advertising ad approved;
+    advertiser_amount = option_uint128 zero128 some_advertiser_amount;
+    rewards = percent_of_amount fee advertiser_amount;
+    variant = is_approved_advertising new_ad total;
+
+    ConfigureAdvertiserBalance owner rewards sub_operation;
+    ConfigureValidatorBalance _sender rewards add_operation;
+
+    moderators_vote_list[owner][_sender] := verdad;
+
+    match variant with
+    | NotEnough =>
+      wait_ad_list[owner] := new_ad
+    | Reject =>
+      new_advertiser_amount = builtin sub advertiser_amount rewards;
+      delete wait_ad_list[owner];
+      delete advertiser_list[owner];
+      delete moderators_vote_list[owner];
+
+      CallTransfer owner new_advertiser_amount
+    | Approve =>
+      current_block <- & BLOCKNUMBER;
+      new_advertiser_amount = builtin sub advertiser_amount rewards;
+
+      ConfigureValidatorBalance _this_address new_advertiser_amount add_operation;
+
+      delete wait_ad_list[owner];
+      delete advertiser_list[owner];
+      delete moderators_vote_list[owner];
+
+      msg = build_banner_msg new_ad owner explorer current_block;
+      send msg
+    end
   | None =>
     err = CodeNotFound;
     ThrowError err
   end
 end
-(* common *)
+
+transition ApproveApplication(owner: ByStr20, approved: Uint32)
+end
+(* moderator *)
 
 (* manager transitions *)
-transition AddApp(title: String, description: String, url: String, image: String, icon: String, category: Uint32, owner: ByStr20)
-  new_app = Application title description url image icon category zero32 zero32;
+transition AddApp(title: String, description: String, url: String, images: List (String), icon: String, category: Uint32, owner: ByStr20)
+  CheckPause;
+  IsManager;
+  IsAlreadyApplication owner;
+
+  new_app = Application title description url images icon category zero32 zero32;
   wait_list_app[owner] := new_app
 end
 
 transition AddAD(bn: Uint256, url: String, banner: String, owner: ByStr20)
+  CheckPause;
+  IsManager;
+  IsAlreadyAdvertising owner;
+
   new_ad = Advertising bn url banner zero32 zero32;
   wait_ad_list[owner] := new_ad
 end
@@ -400,6 +566,7 @@ end
 (* Callbacks *)
 transition RecipientAcceptTransfer(sender: ByStr20, recipient: ByStr20, amount: Uint128)
   IsZLP;
+  CheckPause;
   CheckAmount amount;
   ConfigureTotalValidators add_operation;
   ConfigureValidatorBalance sender amount add_operation
@@ -407,6 +574,7 @@ end
 
 transition RecipientAcceptTransferFrom(initiator: ByStr20, sender: ByStr20, recipient: ByStr20, amount: Uint128)
   IsZLP;
+  CheckPause;
 
   address_manager <- manager;
   is_manager = builtin eq address_manager initiator;
@@ -419,7 +587,7 @@ transition RecipientAcceptTransferFrom(initiator: ByStr20, sender: ByStr20, reci
     ConfigureTotalValidators add_operation;
     ConfigureValidatorBalance sender amount add_operation;
 
-    operators[initiator] := sender
+    operators[sender][initiator] := verdad
   end
 end
 
