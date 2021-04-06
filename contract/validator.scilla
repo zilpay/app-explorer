@@ -98,13 +98,13 @@ let build_app_msg =
     match app with
     | Application t d u im ic ct r a =>
       let app = App t d u im ic ct in
-      {
+      let msg = {
         _tag : "AddApplication";
         _recipient: explorer;
         _amount: Uint128 0;
         app: app;
         owner: owner
-      }
+      } in one_msg msg
     end
   
 (* Check the Advertising for validatrion *)
@@ -158,12 +158,12 @@ let is_approved_app =
       let count = builtin add r a in
       let is_validated = builtin lt total count in
         match is_validated with
-          | False => zero32 (* Not enough vote *)
+          | False => NotEnough (* Not enough vote *)
           | True =>
             let is_approve = builtin lt r a in
             match is_approve with
-            | False => one32 (* AD has rejected nby validators *)
-            | True => two32 (* AD has aproved by validators *)
+            | False => Reject (* AD has rejected nby validators *)
+            | True => Approve (* AD has aproved by validators *)
             end
         end
     end
@@ -171,7 +171,8 @@ let is_approved_app =
 (* Validation process *)
 let validate_app =
   fun (app: Application) =>
-  fun (is_approve: Bool) =>
+  fun (n: Uint32) =>
+    let is_approve = builtin eq n one32 in
     match app with
     | Application t d u im ic ct r a =>
       match is_approve with
@@ -265,7 +266,8 @@ field rewards_fee: Uint128 = Uint128 10
 field advertiser_list: Map ByStr20 Uint128 = Emp ByStr20 Uint128
 field wait_list_app: Map ByStr20 Application = Emp ByStr20 Application
 field wait_ad_list: Map ByStr20 Advertising = Emp ByStr20 Advertising
-field moderators_vote_list: Map ByStr20 (Map ByStr20 Dummy) = Emp ByStr20 (Map ByStr20 Dummy)
+field moderators_vote_list_banner: Map ByStr20 (Map ByStr20 Dummy) = Emp ByStr20 (Map ByStr20 Dummy)
+field moderators_vote_list_app: Map ByStr20 (Map ByStr20 Dummy) = Emp ByStr20 (Map ByStr20 Dummy)
 
 field total_moderators: Uint32 = zero32
 field operators: Map ByStr20 (Map ByStr20 Dummy) = Emp ByStr20 (Map ByStr20 Dummy)
@@ -325,8 +327,19 @@ procedure CheckPause()
   end
 end
 
-procedure IsAlreadyVoted(owner: ByStr20)
-  is_voted <- exists moderators_vote_list[owner][_sender];
+procedure IsAlreadyVotedBanner(owner: ByStr20)
+  is_voted <- exists moderators_vote_list_banner[owner][_sender];
+
+  match is_voted with
+  | True =>
+    err = CodeAlreadyVoted;
+    ThrowError err
+  | False =>
+  end
+end
+
+procedure IsAlreadyVotedApp(owner: ByStr20)
+  is_voted <- exists moderators_vote_list_app[owner][_sender];
 
   match is_voted with
   | True =>
@@ -504,7 +517,7 @@ end
 transition ApproveAdvertising(owner: ByStr20, approved: Uint32)
   CheckPause;
   IsValidator;
-  IsAlreadyVoted owner;
+  IsAlreadyVotedBanner owner;
 
   some_ad <- wait_ad_list[owner];
 
@@ -522,7 +535,7 @@ transition ApproveAdvertising(owner: ByStr20, approved: Uint32)
     ConfigureAdvertiserBalance owner rewards sub_operation;
     ConfigureValidatorBalance _sender rewards add_operation;
 
-    moderators_vote_list[owner][_sender] := verdad;
+    moderators_vote_list_banner[owner][_sender] := verdad;
 
     match variant with
     | NotEnough =>
@@ -531,7 +544,7 @@ transition ApproveAdvertising(owner: ByStr20, approved: Uint32)
       new_advertiser_amount = builtin sub advertiser_amount rewards;
       delete wait_ad_list[owner];
       delete advertiser_list[owner];
-      delete moderators_vote_list[owner];
+      delete moderators_vote_list_banner[owner];
 
       CallTransfer owner new_advertiser_amount
     | Approve =>
@@ -542,7 +555,7 @@ transition ApproveAdvertising(owner: ByStr20, approved: Uint32)
 
       delete wait_ad_list[owner];
       delete advertiser_list[owner];
-      delete moderators_vote_list[owner];
+      delete moderators_vote_list_banner[owner];
 
       msg = build_banner_msg new_ad owner explorer current_block;
       send msg
@@ -554,6 +567,37 @@ transition ApproveAdvertising(owner: ByStr20, approved: Uint32)
 end
 
 transition ApproveApplication(owner: ByStr20, approved: Uint32)
+  CheckPause;
+  IsValidator;
+  IsAlreadyVotedApp owner;
+
+  some_app <- wait_list_app[owner];
+
+  match some_app with
+  | Some app =>
+    total <- total_moderators;
+    new_app = validate_app app approved;
+    variant = is_approved_app new_app total;
+
+    moderators_vote_list_app[owner][_sender] := verdad;
+
+    match variant with
+    | NotEnough =>
+      wait_list_app[owner] := new_app
+    | Reject =>
+      delete wait_list_app[owner];
+      delete moderators_vote_list_app[owner]
+    | Approve =>
+      delete wait_list_app[owner];
+      delete moderators_vote_list_app[owner];
+
+      msg = build_app_msg new_app owner explorer;
+      send msg
+    end
+  | None =>
+    err = CodeNotFound;
+    ThrowError err
+  end
 end
 (* moderator *)
 
