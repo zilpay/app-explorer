@@ -35,8 +35,8 @@ type App =
 | App of String String String (List String) String Uint32
 
 (* Custom ADT storing - end_block_number, url, ipfs_banner_url *)
-type AD =
-| AD of Uint256 String String
+type Banner =
+| Banner of Uint256 String String
 
 (* Error events *)
 type Error =
@@ -150,14 +150,14 @@ procedure TransferFrom(amount: Uint128, from: ByStr20)
 
   match is_zero with
   | False =>
-    validator <- contract_validator;
+    to <- contract_validator;
 
     call_transfer_zlp = {
       _tag: "TransferFrom";
       _recipient: zlp;
       _amount: Uint128 0;
       from: from;
-      to: validator;
+      to: to;
       amount: amount
     };
 
@@ -184,14 +184,14 @@ procedure SendAppToCheck(app: App)
   send msgs
 end
 
-procedure SendADToCheck(ad: AD, owner: ByStr20, amount: Uint128)
+procedure SendADToCheck(ad: Banner, owner: ByStr20, amount: Uint128)
   recipient <- contract_validator;
 
   call_add_ad = {
     _tag: "AddAD";
     _recipient: recipient;
     _amount: Uint128 0;
-    ad: ad;
+    banner: ad;
     owner: owner;
     amount: amount
   };
@@ -299,7 +299,7 @@ transition AddAD(amountZLP: Uint128, url: String, banner_url: String)
   decimal <- block_decimal;
 
   zlp_to_blocks = zlp_to_blocks amountZLP decimal;
-  new_ad = AD zlp_to_blocks url banner_url;
+  new_ad = Banner zlp_to_blocks url banner_url;
 
   SendADToCheck new_ad _sender amountZLP
 end
