@@ -6,19 +6,19 @@ library ZilPayValidator
 
 (* Custom ADT storing - Title, ipfs_description, url, ipfs_image, ipfs_icon, category, rejected, approve *)
 type Application =
-| Application of String String String (List String) String Uint32 Uint32 Uint32
+  | Application of String String String (List String) String Uint32 Uint32 Uint32
 
 (* Custom ADT storing - end_block_number, url, ipfs_banner_url, rejected, approve *)
 type Advertising =
-| Advertising of Uint256 String String Uint32 Uint32
+  | Advertising of Uint256 String String Uint32 Uint32
 
 (* Custom ADT storing - Title, ipfs_description, url, ipfs_image, ipfs_icon, category *)
 type App =
-| App of String String String (List String) String Uint32
+  | App of String String String (List String) String Uint32
 
 (* Custom ADT storing - end_block_number, url, ipfs_banner_url *)
 type Banner =
-| Banner of Uint256 String String
+  | Banner of Uint256 String String
 
 type Operation =
   | Add
@@ -44,7 +44,7 @@ type Error =
 
 type Dummy =
   | Dummy
-  
+
 let zero_address = 0x0000000000000000000000000000000000000000
 let verdad = Dummy
 (* Global variables *)
@@ -459,6 +459,7 @@ procedure CallTransfer(to: ByStr20, amount: Uint128)
 end
 
 (* Owner *)
+(* TODO: add transition for remove validator, ad, app. *)
 transition ConfigureManager(new_manager: ByStr20)
   IsContractOwner;
 
