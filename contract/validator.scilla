@@ -494,7 +494,7 @@ transition WithdrawSelf(to: ByStr20)
 
   balance = option_uint128 zero128 some_balance;
 
-  ConfigureValidatorBalance to balance sub_operation;
+  ConfigureValidatorBalance _this_address balance sub_operation;
   CallTransfer to balance
 end
 (* Onwer *)
