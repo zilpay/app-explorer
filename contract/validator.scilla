@@ -53,7 +53,6 @@ let zero128 = Uint128 0
 let zero32  = Uint32 0
 let zerobn  = BNum 0
 
-let one128  = Uint128 1
 let one32   = Uint32 1
 let two32   = Uint32 2
 
@@ -88,7 +87,7 @@ let update_tokens_count =
       | Add =>
         builtin add balance amount
       | Sub =>
-        builtin sub balance amount
+        builtin sub balance amount (* check overflow. if amount > balance *)
       end
 
 let build_app_msg =
@@ -107,7 +106,7 @@ let build_app_msg =
       } in one_msg msg
     end
   
-(* Check the Advertising for validatrion *)
+(* Check the Advertising for validation *)
 (* 0 need more vote *)
 (* 1 Advertising was rejected *)
 (* 2 Advertising was aporved *)
@@ -124,7 +123,7 @@ let is_approved_advertising =
           | True =>
             let is_approve = builtin lt rejected approve in
             match is_approve with
-            | False => Reject (* AD has rejected nby validators *)
+            | False => Reject (* AD has rejected by validators *)
             | True => Approve (* AD has aproved by validators *)
             end
         end
@@ -370,7 +369,7 @@ procedure IsAlreadyApplication(owner: ByStr20)
   | False =>
   end
 end
-
+(* add checking sender and to *)
 procedure isOwnerOrOperator(to: ByStr20)
   is_operator <- exists operators[to][_sender];
   is_owner <- exists holder_list[_sender];
@@ -500,9 +499,10 @@ end
 (* Onwer *)
 
 (* common *)
+(* TODO: add amount. *)
 transition Withdraw(to: ByStr20)
   isOwnerOrOperator to;
-  
+
   some_balance <- holder_list[to];
   balance = option_uint128 zero128 some_balance;
 
