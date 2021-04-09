@@ -45,9 +45,9 @@ type Error =
 type Dummy =
   | Dummy
 
+(* Global variables *)
 let zero_address = 0x0000000000000000000000000000000000000000
 let verdad = Dummy
-(* Global variables *)
 let zero256 = Uint256 0
 let zero128 = Uint128 0
 let zero32  = Uint32 0
@@ -55,6 +55,10 @@ let zerobn  = BNum 0
 
 let one32   = Uint32 1
 let two32   = Uint32 2
+
+let add_operation = Add
+let sub_operation = Sub
+(* Global variables *)
 
 let one_msg =
   fun (msg: Message) =>
@@ -73,9 +77,6 @@ let option_value =
 let option_uint256 = @option_value Uint256
 let option_uint128 = @option_value Uint128
 
-let add_operation = Add
-let sub_operation = Sub
-
 (* Calculate new amount of tokens *)
 (* Return the new amount *)
 let update_tokens_count =
@@ -87,7 +88,7 @@ let update_tokens_count =
       | Add =>
         builtin add balance amount
       | Sub =>
-        builtin sub balance amount (* check overflow. if amount > balance *)
+        builtin sub balance amount
       end
 
 let build_app_msg =
@@ -105,7 +106,7 @@ let build_app_msg =
         owner: owner
       } in one_msg msg
     end
-  
+
 (* Check the Advertising for validation *)
 (* 0 need more vote *)
 (* 1 Advertising was rejected *)
@@ -371,9 +372,13 @@ procedure IsAlreadyApplication(owner: ByStr20)
 end
 (* add checking sender and to *)
 procedure isOwnerOrOperator(to: ByStr20)
-  is_operator <- exists operators[to][_sender];
-  is_owner <- exists holder_list[_sender];
-  is_allow = orb is_operator is_owner;
+  is_exists_operator <- exists operators[to][_sender];
+  is_exists_owner <- exists holder_list[_sender];
+  is_owner = match is_exists_owner with
+    | True => builtin eq to _sender
+    | False => False
+  end;
+  is_allow = orb is_exists_operator is_owner;
 
   match is_allow with
   | True =>
@@ -457,6 +462,18 @@ procedure CallTransfer(to: ByStr20, amount: Uint128)
   send msgs
 end
 
+procedure WithdrawTokens(address: ByStr20)
+  some_balance <- holder_list[address];
+  balance = option_uint128 zero128 some_balance;
+
+  ConfigureValidatorBalance address balance sub_operation;
+  ConfigureTotalValidators sub_operation;
+  CallTransfer address balance;
+
+  delete operators[address]
+end
+
+
 (* Owner *)
 (* TODO: add transition for remove validator, ad, app. *)
 transition ConfigureManager(new_manager: ByStr20)
@@ -496,21 +513,49 @@ transition WithdrawSelf(to: ByStr20)
   ConfigureValidatorBalance _this_address balance sub_operation;
   CallTransfer to balance
 end
+
+transition RemoveValidatorList(addresses: List ByStr20)
+  IsContractOwner;
+  forall addresses WithdrawTokens
+end
+
+transition RemoveAdvertising(ad_owners: List ByStr20)
+  IsContractOwner;
+
+  call_remove_ad = {
+    _tag: "RemoveADList";
+    _recipient: explorer;
+    _amount: Uint128 0;
+    ad_owners: ad_owners
+  };
+
+  msgs = one_msg call_remove_ad;
+
+  send msgs
+end
+
+transition RemoveApplication(app_owner: ByStr20, category: Uint32)
+  IsContractOwner;
+
+  call_remove_app = {
+    _tag: "RemoveApp";
+    _recipient: explorer;
+    _amount: Uint128 0;
+    category: category;
+    app_owner: app_owner
+  };
+
+  msgs = one_msg call_remove_app;
+
+  send msgs
+end
 (* Onwer *)
 
 (* common *)
 (* TODO: add amount. *)
 transition Withdraw(to: ByStr20)
   isOwnerOrOperator to;
-
-  some_balance <- holder_list[to];
-  balance = option_uint128 zero128 some_balance;
-
-  ConfigureValidatorBalance to balance sub_operation;
-  ConfigureTotalValidators sub_operation;
-  CallTransfer to balance;
-
-  delete operators[to]
+  WithdrawTokens to
 end
 (* common *)
 
