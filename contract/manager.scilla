@@ -20,14 +20,14 @@ let option_value =
     | None => default
     end
 
-let option_uint256 = @option_value Uint256
+let option_uint128 = @option_value Uint128
 
 let zlp_to_blocks =
     fun (amount: Uint128) =>
-    fun (block_decimal: Uint256) =>
-    let some_amount_256 = builtin to_uint256 amount in
-    let amount_256 = option_uint256 zero256 some_amount_256 in
-      builtin div amount_256 block_decimal
+    fun (block_decimal: Uint128) =>
+    let some_amount_128 = builtin to_uint128 amount in
+    let amount_128 = option_uint128 zero128 some_amount_128 in
+      builtin div amount_128 block_decimal
 
 
 (* Custom ADT storing - Title, ipfs_description, url, ipfs_image, ipfs_icon, category *)
@@ -36,7 +36,7 @@ type App =
 
 (* Custom ADT storing - end_block_number, url, ipfs_banner_url *)
 type Banner =
-| Banner of Uint256 String String
+| Banner of Uint128 String String
 
 (* Error events *)
 type Error =
@@ -73,9 +73,8 @@ contract ZilPayManager
 field pause: Bool = False
 field max_category: Uint32 = Uint32 6
 
-field min_price_for_ad: Uint128 = Uint128 2000000000000000000
 field price_for_app: Uint128 = Uint128 0
-field block_decimal: Uint256 = Uint256 2000000000000000000
+field block_decimal: Uint128 = Uint128 2000000000000000000
 
 field contract_validator: ByStr20 = validator
 
@@ -98,7 +97,7 @@ procedure IsValidator()
 end
 
 procedure CheckPriceForAD(amount: Uint128)
-  price <- min_price_for_ad;
+  price <- block_decimal;
 
   is_lt = builtin lt amount price;
 
@@ -234,7 +233,7 @@ transition ConfigureCategory(value: Uint32)
   event e
 end
 
-transition ConfigureBlockDecimal(value: Uint256)
+transition ConfigureBlockDecimal(value: Uint128)
   IsContractOwner;
 
   block_decimal := value;
@@ -242,21 +241,6 @@ transition ConfigureBlockDecimal(value: Uint256)
   e = {
     _eventname : "ConfiguredBlockDecimalEvent";
     new_block_decimal: value
-  };
-  event e
-end
-
-transition ConfigureADPrice(new_price: Uint128)
-  IsContractOwner;
-
-  old_price <- min_price_for_ad;
-
-  min_price_for_ad := new_price;
-
-  e = {
-    _eventname : "ConfiguredAdPriceEvent";
-    old_price: old_price;
-    new_price: new_price
   };
   event e
 end
@@ -298,8 +282,8 @@ transition AddAD(amountZLP: Uint128, url: String, banner_url: String)
   
   decimal <- block_decimal;
 
-  zlp_to_blocks = zlp_to_blocks amountZLP decimal;
-  new_ad = Banner zlp_to_blocks url banner_url;
+  blocks = zlp_to_blocks amountZLP decimal;
+  new_ad = Banner blocks url banner_url;
 
   SendADToCheck new_ad _sender amountZLP
 end
