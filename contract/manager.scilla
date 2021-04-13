@@ -191,8 +191,7 @@ procedure SendADToCheck(ad: Banner, owner: ByStr20, amount: Uint128)
     _recipient: recipient;
     _amount: Uint128 0;
     banner: ad;
-    owner: owner;
-    amount: amount
+    owner: owner
   };
 
   msgs = one_msg call_add_ad;

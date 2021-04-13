@@ -433,6 +433,7 @@ procedure ConfigureValidatorBalance(address: ByStr20, amount: Uint128, operation
   | False =>
     holder_list[address] := new_balance
   | True =>
+    ConfigureTotalValidators sub_operation;
     delete holder_list[address]
   end
 end
@@ -473,7 +474,6 @@ procedure WithdrawTokens(address: ByStr20, amount: Uint128)
     ThrowError err
   | False =>
     ConfigureValidatorBalance address balance sub_operation;
-    ConfigureTotalValidators sub_operation;
     CallTransfer address balance;
 
     delete operators[address]
@@ -489,7 +489,6 @@ end
 
 
 (* Owner *)
-(* TODO: add transition for remove validator, ad, app. *)
 transition ConfigureManager(new_manager: ByStr20)
   IsContractOwner;
 
@@ -566,7 +565,6 @@ end
 (* Onwer *)
 
 (* common *)
-(* TODO: add amount. *)
 transition Withdraw(to: ByStr20, amount: Uint128)
   isOwnerOrOperator to;
   WithdrawTokens to amount
