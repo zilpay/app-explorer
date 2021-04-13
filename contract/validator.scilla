@@ -462,15 +462,29 @@ procedure CallTransfer(to: ByStr20, amount: Uint128)
   send msgs
 end
 
-procedure WithdrawTokens(address: ByStr20)
+procedure WithdrawTokens(address: ByStr20, amount: Uint128)
+  some_balance <- holder_list[address];
+  balance = option_uint128 zero128 some_balance;
+  is_lt = builtin lt balance amount;
+
+  match is_lt with
+  | True =>
+    err = CodeInsufficientAmount;
+    ThrowError err
+  | False =>
+    ConfigureValidatorBalance address balance sub_operation;
+    ConfigureTotalValidators sub_operation;
+    CallTransfer address balance;
+
+    delete operators[address]
+  end
+end
+
+procedure RemoveValidator(address: ByStr20)
   some_balance <- holder_list[address];
   balance = option_uint128 zero128 some_balance;
 
-  ConfigureValidatorBalance address balance sub_operation;
-  ConfigureTotalValidators sub_operation;
-  CallTransfer address balance;
-
-  delete operators[address]
+  WithdrawTokens address balance
 end
 
 
@@ -516,7 +530,7 @@ end
 
 transition RemoveValidatorList(addresses: List ByStr20)
   IsContractOwner;
-  forall addresses WithdrawTokens
+  forall addresses RemoveValidator
 end
 
 transition RemoveAdvertising(ad_owners: List ByStr20)
@@ -553,9 +567,9 @@ end
 
 (* common *)
 (* TODO: add amount. *)
-transition Withdraw(to: ByStr20)
+transition Withdraw(to: ByStr20, amount: Uint128)
   isOwnerOrOperator to;
-  WithdrawTokens to
+  WithdrawTokens to amount
 end
 (* common *)
 
