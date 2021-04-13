@@ -271,7 +271,9 @@ field moderators_vote_list_app: Map ByStr20 (Map ByStr20 Dummy) = Emp ByStr20 (M
 
 field total_moderators: Uint32 = zero32
 field operators: Map ByStr20 (Map ByStr20 Dummy) = Emp ByStr20 (Map ByStr20 Dummy)
-field holder_list: Map ByStr20 Uint128 = Emp ByStr20 Uint128
+field holder_list: Map ByStr20 Uint128 =
+  let emp_map = Emp ByStr20 Uint128 in
+    builtin put emp_map _this_address zero128
 
 (* Emit Errors *)
 procedure ThrowError(err : Error)
@@ -411,17 +413,13 @@ procedure IsContractOwner()
   end
 end
 
-procedure ConfigureTotalValidators(operation: Operation)
-  total <- total_moderators;
+procedure ConfigureTotalValidators()
+  holders <- holder_list;
 
-  new_validators = match operation with
-  | Add =>
-    builtin add total one32
-  | Sub =>
-    builtin sub total one32
-  end;
+  size = builtin size holders;
+  size = builtin sub size one32;
 
-  total_moderators := new_validators
+  total_moderators := size
 end
 
 procedure ConfigureValidatorBalance(address: ByStr20, amount: Uint128, operation: Operation)
@@ -433,9 +431,15 @@ procedure ConfigureValidatorBalance(address: ByStr20, amount: Uint128, operation
   | False =>
     holder_list[address] := new_balance
   | True =>
-    ConfigureTotalValidators sub_operation;
-    delete holder_list[address]
-  end
+    is_self = builtin eq address _this_address;
+
+    match is_self with
+    | False => delete holder_list[address]
+    | True =>
+    end
+  end;
+
+  ConfigureTotalValidators
 end
 
 procedure ConfigureAdvertiserBalance(address: ByStr20, amount: Uint128, operation: Operation)
@@ -463,28 +467,14 @@ procedure CallTransfer(to: ByStr20, amount: Uint128)
   send msgs
 end
 
-procedure WithdrawTokens(address: ByStr20, amount: Uint128)
-  some_balance <- holder_list[address];
-  balance = option_uint128 zero128 some_balance;
-  is_lt = builtin lt balance amount;
-
-  match is_lt with
-  | True =>
-    err = CodeInsufficientAmount;
-    ThrowError err
-  | False =>
-    ConfigureValidatorBalance address balance sub_operation;
-    CallTransfer address balance;
-
-    delete operators[address]
-  end
-end
-
-procedure RemoveValidator(address: ByStr20)
+procedure WithdrawTokens(address: ByStr20)
   some_balance <- holder_list[address];
   balance = option_uint128 zero128 some_balance;
 
-  WithdrawTokens address balance
+  ConfigureValidatorBalance address balance sub_operation;
+  CallTransfer address balance;
+
+  delete operators[address]
 end
 
 
@@ -529,7 +519,7 @@ end
 
 transition RemoveValidatorList(addresses: List ByStr20)
   IsContractOwner;
-  forall addresses RemoveValidator
+  forall addresses WithdrawTokens
 end
 
 transition RemoveAdvertising(ad_owners: List ByStr20)
@@ -565,9 +555,9 @@ end
 (* Onwer *)
 
 (* common *)
-transition Withdraw(to: ByStr20, amount: Uint128)
+transition Withdraw(to: ByStr20)
   isOwnerOrOperator to;
-  WithdrawTokens to amount
+  WithdrawTokens to
 end
 (* common *)
 
@@ -684,7 +674,7 @@ transition RecipientAcceptTransfer(sender: ByStr20, recipient: ByStr20, amount: 
   IsZLP;
   CheckPause;
   CheckAmount amount;
-  ConfigureTotalValidators add_operation;
+  ConfigureTotalValidators;
   ConfigureValidatorBalance sender amount add_operation
 end
 
@@ -700,7 +690,7 @@ transition RecipientAcceptTransferFrom(initiator: ByStr20, sender: ByStr20, reci
     ConfigureAdvertiserBalance sender amount add_operation
   | False =>
     CheckAmount amount;
-    ConfigureTotalValidators add_operation;
+    ConfigureTotalValidators;
     ConfigureValidatorBalance sender amount add_operation;
 
     operators[sender][initiator] := verdad
