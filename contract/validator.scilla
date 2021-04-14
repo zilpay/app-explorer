@@ -271,6 +271,7 @@ field moderators_vote_list_app: Map ByStr20 (Map ByStr20 Dummy) = Emp ByStr20 (M
 
 field total_moderators: Uint32 = zero32
 field operators: Map ByStr20 (Map ByStr20 Dummy) = Emp ByStr20 (Map ByStr20 Dummy)
+field white_list: Map ByStr20 Dummy = Emp ByStr20 Dummy
 field holder_list: Map ByStr20 Uint128 =
   let emp_map = Emp ByStr20 Uint128 in
     builtin put emp_map _this_address zero128
@@ -477,6 +478,16 @@ procedure WithdrawTokens(address: ByStr20)
   delete operators[address]
 end
 
+procedure ConfigureModerator(address: ByStr20)
+  some_from_white <- white_list[address];
+
+  match some_from_white with
+  | Some from_white =>
+    delete white_list[address]
+  | None =>
+    white_list[address] := verdad
+  end
+end
 
 (* Owner *)
 transition ConfigureManager(new_manager: ByStr20)
@@ -489,6 +500,11 @@ transition ConfigureManager(new_manager: ByStr20)
     manager: new_manager
   };
   event e
+end
+
+transition ConfigureWhiteList(addresses_list: List ByStr20)
+  IsContractOwner;
+  forall addresses_list ConfigureModerator
 end
 
 transition ConfigurePause()
