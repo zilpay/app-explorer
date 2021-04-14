@@ -2,6 +2,26 @@ scilla_version 0
 
 library ZilPayManager
 
+(* Custom ADT storing - Title, ipfs_description, url, ipfs_image, ipfs_icon, category *)
+type App =
+| App of String String String (List String) String Uint32
+
+(* Custom ADT storing - end_block_number, url, ipfs_banner_url *)
+type Banner =
+| Banner of Uint128 String String
+
+type Operation =
+  | Add
+  | Sub
+
+(* Error events *)
+type Error =
+  | CodeNotContractOwner
+  | CodeOnPause
+  | CodeNotValidator
+  | CodeInsufficientZLPAmount
+  | CodeIncorrectCategory
+
 (* Global variables *)
 let zero128 = Uint128 0
 let zero256 = Uint256 0
@@ -29,22 +49,22 @@ let zlp_to_blocks =
     let amount_128 = option_uint128 zero128 some_amount_128 in
       builtin div amount_128 block_decimal
 
-
-(* Custom ADT storing - Title, ipfs_description, url, ipfs_image, ipfs_icon, category *)
-type App =
-| App of String String String (List String) String Uint32
-
-(* Custom ADT storing - end_block_number, url, ipfs_banner_url *)
-type Banner =
-| Banner of Uint128 String String
-
-(* Error events *)
-type Error =
-  | CodeNotContractOwner
-  | CodeOnPause
-  | CodeNotValidator
-  | CodeInsufficientZLPAmount
-  | CodeIncorrectCategory
+let get_coefficient =
+  fun (value: Uint256) =>
+  fun (amount: Uint256) =>
+  fun (op: Operation) =>
+    match op with
+    | Add =>
+      builtin add value amount
+    | Sub =>
+      let is_lt = builtin lt value amount in
+        match is_lt with
+        | True =>
+          zero256
+        | False =>
+          builtin sub value amount
+        end
+    end
 
 let make_error =
   fun (result : Error) =>
@@ -72,8 +92,9 @@ contract ZilPayManager
 (* Mutable fields *)
 field max_category: Uint32 = Uint32 7
 
-field price_for_app: Uint128 = Uint128 0
+field price_for_app: Uint128 = zero128
 field block_decimal: Uint128 = Uint128 20000
+field coefficient: Uint256 = zero256
 
 field contract_validator: ByStr20 = validator
 
@@ -255,6 +276,14 @@ end
 (* User transitions *)
 
 (* Callbacks *)
+transition ConfigureCoefficient(amount: Uint256, op: Operation)
+  IsValidator;
+  value <- coefficient;
+
+  new_coefficient = get_coefficient value amount op;
+  coefficient := new_coefficient
+end
+
 transition TransferFromSuccessCallBack(initiator: ByStr20, sender: ByStr20, recipient: ByStr20, amount: Uint128)
 end
 

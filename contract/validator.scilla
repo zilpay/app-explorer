@@ -200,6 +200,12 @@ let bn_to_uint =
   let some_int_block = builtin to_uint256 int_block in
     option_uint256 zero256 some_int_block
 
+let get_block_amount =
+  fun (ad: Advertising) =>
+    match ad with
+      | Advertising block url ipfs rejected approve => block
+      end
+
 let build_banner_msg =
   fun (ad: Advertising) =>
   fun (owner: ByStr20) =>
@@ -265,6 +271,7 @@ field min_stake_amount: Uint128 = zero128
 field manager: ByStr20 = zero_address
 field rewards_fee: Uint128 = Uint128 10
 
+field blocks_list: Map ByStr20 Uint256 = Emp ByStr20 Uint256
 field advertiser_list: Map ByStr20 Uint128 = Emp ByStr20 Uint128
 field wait_list_app: Map ByStr20 Application = Emp ByStr20 Application
 field wait_ad_list: Map ByStr20 Advertising = Emp ByStr20 Advertising
@@ -469,6 +476,30 @@ procedure ConfigureAdvertiserBalance(address: ByStr20, amount: Uint128, operatio
   end
 end
 
+procedure ConfigureCoefficient(amount: Uint256, op: Operation)
+  recipient <- manager;
+
+  msg_configure_coefficient = {
+    _tag: "ConfigureCoefficient";
+    _recipient: recipient;
+    _amount: zero128;
+    amount: amount;
+    op: op
+  };
+  msgs = one_msg msg_configure_coefficient;
+  send msgs
+end
+
+procedure SubCoefficient(address: ByStr20)
+  some_amount <- blocks_list[address];
+
+  match some_amount with
+  | Some amount =>
+    ConfigureCoefficient amount sub_operation
+  | None =>
+  end
+end
+
 procedure CallTransfer(to: ByStr20, amount: Uint128)
   msg_transfer = {
     _tag: "Transfer";
@@ -553,6 +584,7 @@ end
 
 transition RemoveAdvertising(ad_owners: List ByStr20)
   IsContractOwner;
+  forall ad_owners SubCoefficient;
 
   call_remove_ad = {
     _tag: "RemoveADList";
@@ -627,12 +659,15 @@ transition ApproveAdvertising(owner: ByStr20, approved: Uint32)
     | Approve =>
       current_block <- & BLOCKNUMBER;
       new_advertiser_amount = builtin sub advertiser_amount rewards;
+      blocks_amount = get_block_amount ad;
 
       ConfigureValidatorBalance _this_address new_advertiser_amount add_operation;
+      ConfigureCoefficient blocks_amount add_operation;
 
       delete wait_ad_list[owner];
       delete advertiser_list[owner];
       delete moderators_vote_list_banner[owner];
+      blocks_list[owner] := blocks_amount;
 
       msg = build_banner_msg new_ad owner explorer current_block;
       send msg
