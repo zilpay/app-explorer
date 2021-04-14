@@ -41,6 +41,7 @@ type Error =
   | CodeIsNotOwnerOrOperator
   | CodeAlreadyVoted
   | CodeAlreadyExists
+  | CodeNotInWhiteList
 
 type Dummy =
   | Dummy
@@ -246,6 +247,7 @@ let make_error =
       | CodeIsNotOwnerOrOperator  => Int32 -8
       | CodeAlreadyVoted          => Int32 -9
       | CodeAlreadyExists         => Int32 -10
+      | CodeNotInWhiteList        => Int32 -11
       end
     in
     { _exception : "Error"; code : result_code }
@@ -313,6 +315,17 @@ procedure IsValidator()
   | True =>
   | False =>
     err = CodeNotValidator;
+    ThrowError err
+  end
+end
+
+procedure IsWhiteList(address: ByStr20)
+  is_exists <- exists white_list[address];
+
+  match is_exists with
+  | True =>
+  | False =>
+    err = CodeNotInWhiteList;
     ThrowError err
   end
 end
@@ -689,8 +702,9 @@ end
 transition RecipientAcceptTransfer(sender: ByStr20, recipient: ByStr20, amount: Uint128)
   IsZLP;
   CheckPause;
-  CheckAmount amount;
   ConfigureTotalValidators;
+  CheckAmount amount;
+  IsWhiteList sender;
   ConfigureValidatorBalance sender amount add_operation
 end
 
@@ -707,6 +721,7 @@ transition RecipientAcceptTransferFrom(initiator: ByStr20, sender: ByStr20, reci
   | False =>
     CheckAmount amount;
     ConfigureTotalValidators;
+    IsWhiteList sender;
     ConfigureValidatorBalance sender amount add_operation;
 
     operators[sender][initiator] := verdad
