@@ -1,0 +1,206 @@
+scilla_version 0
+
+(***************************************************)
+(*               Associated library                *)
+(***************************************************)
+
+library BondingCurvedDistributor
+
+(* Error events *)
+type Error =
+  | CodeNotAuthorised
+  | CodeNotMain
+  | CodeInsufficientFunds
+  | CodeNotContractOwner
+
+(* Custom ADT storing - Title, ipfs_description, url, ipfs_image, ipfs_icon, category *)
+type App =
+| App of String String String (List String) String Uint32
+
+(* Custom ADT storing - end_block_number, url, ipfs_banner_url *)
+type Banner =
+| Banner of Uint128 String String
+
+type Operation =
+  | Add
+  | Sub
+
+let customization = Uint256 100000000000
+let exponent = Uint32 2
+let zero256 = Uint256 0
+let zero128 = Uint128 0
+let one256 = Uint256 1
+let one32 = Uint32 1
+
+let one_msg = 
+  fun (msg : Message) => 
+  let nil_msg = Nil {Message} in
+  Cons {Message} msg nil_msg
+
+let make_error =
+  fun (result : Error) =>
+    let result_code = 
+      match result with
+      | CodeNotAuthorised     => Int32 -1
+      | CodeNotMain           => Int32 -2
+      | CodeInsufficientFunds => Int32 -3
+      | CodeNotContractOwner  => Int32 -4
+      end
+    in
+    { _exception : "Error"; code : result_code }
+
+let option_value =
+  tfun 'A =>
+  fun (default: 'A) =>
+  fun (opt_val: Option 'A) =>
+    match opt_val with
+    | Some v => v
+    | None => default
+    end
+
+let option_uint256 = @option_value Uint256
+let option_uint128 = @option_value Uint128
+
+let to_256 =
+  fun (v: Uint32) =>
+    let v32 = builtin to_uint256 v in
+      option_uint256 zero256 v32
+
+(* b = customization / exponent + 1 * s**(exponent + 1) *)
+(* s - total_supply *)
+let get_pool_balance =
+  fun (s: Uint256) =>
+    let n = builtin add exponent one32 in
+    let n256 = to_256 n in
+    let mn = builtin div customization n256 in
+    let ts = builtin add s one256 in
+    let s_pow = builtin pow ts n in
+      builtin mul mn s_pow
+
+(* p = (customization / exponent + 1 (s + k) ** exponent + 1) - b *)
+(* s - total_supply *)
+(* b - poolBalance *)
+let get_price =
+  fun (s: Uint256) =>
+  fun (b: Uint256) =>
+    let n = builtin add exponent one32 in
+    let n256 = to_256 n in
+    let mn = builtin div customization n256 in
+    let k256 = to_256 one32 in
+    let ts = builtin add s one256 in
+    let sk = builtin add ts k256 in
+    let sk_exp = builtin pow sk n in
+    let value = builtin mul mn sk_exp in
+    let amount = builtin sub value b in
+    let some_amount = builtin to_uint128 amount in
+      option_uint128 zero128 some_amount
+
+let reserve_update =
+  fun (amount: Uint256) =>
+  fun (reserve: Uint256) =>
+  fun (op: Operation) =>
+    match op with
+    | Add => builtin add reserve amount
+    | Sub => builtin sub reserve amount
+    end
+
+(* divides amount and decimal - amount / decimal *)
+(* amount - ZLP amount *)
+(* decimal - ZLP decimal *)
+let zlp_to_blocks =
+  fun (amount: Uint128) =>
+  fun (block_decimal: Uint128) =>
+    builtin div amount block_decimal
+(***************************************************)
+(*             The contract definition             *)
+(***************************************************)
+
+contract BondingCurvedDistributor
+(
+  moderator: ByStr20,
+  zlp: ByStr20
+)
+
+(* Mutable fields *)
+
+(* Total token count *)
+field reserve: Uint256 = one256
+
+field tokens_reserve: Map Uint256 String = Emp Uint256 String
+
+(* Emit Errors *)
+procedure ThrowError(err : Error)
+  e = make_error err;
+  throw e
+end
+procedure TransferFrom(amount: Uint128, from: ByStr20)
+  is_zero = builtin eq zero128 amount;
+
+  match is_zero with
+  | False =>
+    call_transfer_zlp = {
+      _tag: "TransferFrom";
+      _recipient: zlp;
+      _amount: Uint128 0;
+      from: from;
+      to: moderator;
+      amount: amount
+    };
+
+    msgs = one_msg call_transfer_zlp;
+
+    send msgs
+  | True =>
+  end
+end
+procedure SendADToCheck(ad: Banner, owner: ByStr20, amount: Uint128)
+  call_add_ad = {
+    _tag: "AddAD";
+    _recipient: moderator;
+    _amount: Uint128 0;
+    banner: ad;
+    owner: owner
+  };
+
+  msgs = one_msg call_add_ad;
+
+  send msgs
+end
+
+transition AddAdvertising(amount: Uint128, url: String, banner_url: String)
+  total_reserve <- reserve;
+
+  b = get_pool_balance total_reserve;
+  price = get_price total_reserve b;
+  blocks = zlp_to_blocks amount price;
+  is_zero = builtin eq blocks zero128;
+
+  match is_zero with
+  | False =>
+    new_ad = Banner blocks url banner_url;
+
+    TransferFrom amount _sender;
+    SendADToCheck new_ad _sender amount;
+
+    e = {
+      _eventname : "AddAdvertisingEvent";
+      advertising: new_ad;
+      blocks: blocks
+    };
+    event e
+  | True =>
+    err = CodeInsufficientFunds;
+    ThrowError err
+  end
+end
+
+(* callbacks *)
+transition ConfigureCoefficient(amount: Uint256, op: Operation)
+  total_reserve <- reserve;
+  new_total_reserve = reserve_update amount total_reserve op;
+  reserve := new_total_reserve
+end
+
+transition TransferFromSuccessCallBack(initiator: ByStr20, sender: ByStr20, recipient: ByStr20, amount: Uint128)
+end
+(* callbacks *)
