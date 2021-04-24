@@ -26,9 +26,9 @@ type Operation =
   | Add
   | Sub
 
-let customization = Uint256 100000000000
-let max_blocks = Uint128 100
-let exponent = Uint32 1
+let customization = Uint256 100000000000000
+let max_blocks = Uint128 200
+let exponent = Uint32 2
 let zero256 = Uint256 0
 let zero128 = Uint128 0
 let one256 = Uint256 1
@@ -135,7 +135,7 @@ contract BondingCurvedDistributor
 (* Total token count *)
 field price_for_app: Uint128 = zero128
 field max_category: Uint32 = Uint32 7
-field reserve: Uint256 = one256
+field reserve: Uint256 = Uint256 200
 
 (* Emit Errors *)
 procedure ThrowError(err : Error)
