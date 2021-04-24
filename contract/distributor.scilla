@@ -27,6 +27,7 @@ type Operation =
   | Sub
 
 let customization = Uint256 100000000000
+let max_blocks = Uint128 100
 let exponent = Uint32 1
 let zero256 = Uint256 0
 let zero128 = Uint128 0
@@ -112,7 +113,12 @@ let reserve_update =
 let zlp_to_blocks =
   fun (amount: Uint128) =>
   fun (block_decimal: Uint128) =>
-    builtin div amount block_decimal
+    value = builtin div amount block_decimal in
+    is_max = builtin lt value max_blocks in
+      match is_max with
+      | True => value
+      | False => max_blocks
+      end
 (***************************************************)
 (*             The contract definition             *)
 (***************************************************)
@@ -130,8 +136,6 @@ contract BondingCurvedDistributor
 field price_for_app: Uint128 = zero128
 field max_category: Uint32 = Uint32 7
 field reserve: Uint256 = one256
-
-field tokens_reserve: Map Uint256 String = Emp Uint256 String
 
 (* Emit Errors *)
 procedure ThrowError(err : Error)
