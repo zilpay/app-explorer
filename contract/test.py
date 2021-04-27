@@ -44,8 +44,8 @@ def buy(amount):
 prices = []
 block_list = []
 
-for i in range(10):
-    amount = randint(1, 1000) * DECIMAL
+for i in range(100):
+    amount = randint(1, 100) * (DECIMAL)
     # amount = 500 * DECIMAL
     (price, blocks) = buy(amount)
     reserve = reserve + blocks
