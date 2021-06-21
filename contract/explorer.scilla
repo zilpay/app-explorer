@@ -159,11 +159,12 @@ transition AddBanner(end_block: Uint256, url: String, ipfs: String, owner: ByStr
   IsValidator;
   IsAlreadyExistsPoster owner;
 
-  ad_list[owner] := banner;
+  new_banner = Banner end_block url ipfs;
+  ad_list[owner] := new_banner;
 
   e = {
     _eventname : "AddedADEvent";
-    added_banner: banner;
+    added_banner: new_banner;
     onwer: owner
   };
   event e
