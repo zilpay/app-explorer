@@ -23,7 +23,7 @@ const upload = multer({
 });
 
 async function uploadMiddleware(req: Request, res: Response, next: NextFunction) {
-  if (!req.file && !req.files) {
+  if (!req.file) {
     return res.status(422).json({
       error: 'File needs to be provided.',
       code: -1
@@ -81,8 +81,6 @@ uploadRouter.post('/upload/imgs', upload.array('images', 5), async (req: Request
     const hashs: string[] = [];
     for (let index = 0; index < req.files.length; index++) {
       const file = req.files[index];
-
-      console.log(file);
       const readableStreamForFile = fs.createReadStream(file.path);
       const hash = await pinImage(readableStreamForFile);
   

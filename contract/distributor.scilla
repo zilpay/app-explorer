@@ -20,14 +20,14 @@ type App =
 
 (* Custom ADT storing - end_block_number, url, ipfs_banner_url *)
 type Banner =
-| Banner of Uint128 String String
+| Banner of Uint256 String String
 
 type Operation =
   | Add
   | Sub
 
 let customization = Uint256 100000000000000
-let max_blocks = Uint128 200
+let max_blocks = Uint256 200
 let exponent = Uint32 2
 let zero256 = Uint256 0
 let zero128 = Uint128 0
@@ -113,10 +113,12 @@ let reserve_update =
 let zlp_to_blocks =
   fun (amount: Uint128) =>
   fun (block_decimal: Uint128) =>
-    value = builtin div amount block_decimal in
-    is_max = builtin lt value max_blocks in
+    let value128 = builtin div amount block_decimal in
+    let some_256_value = builtin to_uint256 value128 in
+    let value256 = option_uint256 zero256 some_256_value in
+    let is_max = builtin lt value256 max_blocks in
       match is_max with
-      | True => value
+      | True => value256
       | False => max_blocks
       end
 (***************************************************)
@@ -182,18 +184,23 @@ procedure TransferFrom(amount: Uint128, from: ByStr20)
   | True =>
   end
 end
-procedure SendADToCheck(ad: Banner, owner: ByStr20, amount: Uint128)
-  call_add_ad = {
-    _tag: "AddAD";
-    _recipient: moderator;
-    _amount: Uint128 0;
-    banner: ad;
-    owner: owner
-  };
+procedure SendADToCheck(ad: Banner, owner: ByStr20)
+  match ad with
+  | Banner block url ipfs =>
+    call_add_ad = {
+      _tag: "AddAD";
+      _recipient: moderator;
+      _amount: Uint128 0;
+      block: block;
+      url: url;
+      ipfs: ipfs;
+      owner: owner
+    };
 
-  msgs = one_msg call_add_ad;
+    msgs = one_msg call_add_ad;
 
-  send msgs
+    send msgs
+  end
 end
 procedure SendAppToCheck(app: App)
   call_add_app = {
@@ -227,14 +234,14 @@ transition AddAdvertising(amount: Uint128, url: String, banner_url: String)
   b = get_pool_balance total_reserve;
   price = get_price total_reserve b;
   blocks = zlp_to_blocks amount price;
-  is_zero = builtin eq blocks zero128;
+  is_zero = builtin eq blocks zero256;
 
   match is_zero with
   | False =>
     new_ad = Banner blocks url banner_url;
 
     TransferFrom amount _sender;
-    SendADToCheck new_ad _sender amount;
+    SendADToCheck new_ad _sender;
 
     e = {
       _eventname : "AddAdvertisingEvent";

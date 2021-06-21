@@ -723,12 +723,13 @@ transition AddApp(app: App, owner: ByStr20)
   wait_list_app[owner] := new_app
 end
 
-transition AddAD(banner: Banner, owner: ByStr20)
+transition AddAD(block: Uint128, url: String, ipfs: String, owner: ByStr20)
   CheckPause;
   IsManager;
   IsAlreadyAdvertising owner;
 
-  new_ad = convert_banner banner;
+  new_banner = Banner block url ipfs;
+  new_ad = convert_banner new_banner;
   wait_ad_list[owner] := new_ad
 end
 (* manager transitions *)
