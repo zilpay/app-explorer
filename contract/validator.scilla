@@ -215,12 +215,13 @@ let build_banner_msg =
     | Advertising block url ipfs rejected approve =>
       let block_256 = bn_to_uint current_block in
       let end_block = builtin add block_256 block in
-      let banner = Banner end_block url ipfs in
       let msg = {
         _tag : "AddBanner";
         _recipient: explorer;
         _amount: Uint128 0;
-        banner: banner;
+        end_block: end_block;
+        url: url;
+        ipfs: ipfs;
         owner: owner
       } in one_msg msg
     end

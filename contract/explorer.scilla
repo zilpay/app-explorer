@@ -155,7 +155,7 @@ transition AddApplication(app: App, owner: ByStr20)
   end
 end
 
-transition AddBanner(banner: Banner, owner: ByStr20)
+transition AddBanner(end_block: Uint256, url: String, ipfs: String, owner: ByStr20)
   IsValidator;
   IsAlreadyExistsPoster owner;
 
