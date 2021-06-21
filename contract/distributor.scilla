@@ -22,10 +22,6 @@ type App =
 type Banner =
 | Banner of Uint256 String String
 
-type Operation =
-  | Add
-  | Sub
-
 let customization = Uint256 100000000000000
 let max_blocks = Uint256 200
 let exponent = Uint32 2
@@ -101,10 +97,10 @@ let get_price =
 let reserve_update =
   fun (amount: Uint256) =>
   fun (reserve: Uint256) =>
-  fun (op: Operation) =>
+  fun (op: Bool) =>
     match op with
-    | Add => builtin add reserve amount
-    | Sub => builtin sub reserve amount
+    | True => builtin add reserve amount
+    | False => builtin sub reserve amount
     end
 
 (* divides amount and decimal - amount / decimal *)
@@ -202,19 +198,6 @@ procedure SendADToCheck(ad: Banner, owner: ByStr20)
     send msgs
   end
 end
-procedure SendAppToCheck(app: App)
-  call_add_app = {
-    _tag: "AddApp";
-    _recipient: moderator;
-    _amount: Uint128 0;
-    app: app;
-    owner: _sender
-  };
-
-  msgs = one_msg call_add_app;
-
-  send msgs
-end
 procedure CheckCategory(category: Uint32)
   max <- max_category;
 
@@ -262,9 +245,22 @@ transition AddApp(title: String, des_url: String, url: String, ipfs_image: List 
 
   TransferFrom price _sender;
 
-  new_app = App title des_url url ipfs_image ipfs_icon category;
+  call_add_app = {
+    _tag: "AddApp";
+    _recipient: moderator;
+    _amount: Uint128 0;
+    title: title;
+    des_url: des_url;
+    url: url;
+    ipfs_image: ipfs_image;
+    ipfs_icon: ipfs_icon;
+    category: category;
+    owner: _sender
+  };
 
-  SendAppToCheck new_app
+  msgs = one_msg call_add_app;
+
+  send msgs
 end
 
 (* Admin transitions *)
@@ -297,7 +293,7 @@ end
 (* Admin transitions *)
 
 (* callbacks *)
-transition ConfigureCoefficient(amount: Uint256, op: Operation)
+transition ConfigureCoefficient(amount: Uint256, op: Bool)
   IsModerator;
 
   total_reserve <- reserve;

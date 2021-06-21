@@ -139,20 +139,18 @@ end
 (* Admin transitions *)
 
 (* validator transitions *)
-transition AddApplication(app: App, owner: ByStr20)
+transition AddApplication(title: String, des_url: String, url: String, ipfs_image: List String, ipfs_icon: String, category: Uint32, owner: ByStr20)
   IsValidator;
 
-  match app with
-  | App t d u im ic category =>
-    app_list[category][owner] := app;
+  new_app = App title des_url url ipfs_image ipfs_icon category;
+  app_list[category][owner] := new_app;
 
-    e = {
-      _eventname : "AddedAppEvent";
-      added_app: app;
-      onwer: owner
-    };
-    event e
-  end
+  e = {
+    _eventname : "AddedAppEvent";
+    added_app: new_app;
+    onwer: owner
+  };
+  event e
 end
 
 transition AddBanner(end_block: Uint256, url: String, ipfs: String, owner: ByStr20)

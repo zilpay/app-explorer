@@ -98,12 +98,16 @@ let build_app_msg =
   fun (explorer: ByStr20) =>
     match app with
     | Application t d u im ic ct r a =>
-      let app = App t d u im ic ct in
       let msg = {
         _tag : "AddApplication";
         _recipient: explorer;
         _amount: Uint128 0;
-        app: app;
+        title: t;
+        des_url: d;
+        url: u;
+        ipfs_image: im;
+        ipfs_icon: ic;
+        category: ct;
         owner: owner
       } in one_msg msg
     end
@@ -231,13 +235,6 @@ let convert_banner =
   match banner with
   | Banner block url ipfs =>
     Advertising block url ipfs zero32 zero32
-  end
-
-let convert_app =
-  fun (app: App) =>
-  match app with
-  | App t d u im ic ct =>
-    Application t d u im ic ct zero32 zero32
   end
 
 let make_error =
@@ -479,13 +476,17 @@ end
 
 procedure ConfigureCoefficient(amount: Uint256, op: Operation)
   recipient <- manager;
+  is_increase = match op with
+  | Add => True
+  | Sub => False
+  end;
 
   msg_configure_coefficient = {
     _tag: "ConfigureCoefficient";
     _recipient: recipient;
     _amount: zero128;
     amount: amount;
-    op: op
+    op: is_increase
   };
   msgs = one_msg msg_configure_coefficient;
   send msgs
@@ -715,16 +716,16 @@ end
 (* moderator *)
 
 (* manager transitions *)
-transition AddApp(app: App, owner: ByStr20)
+transition AddApp(title: String, des_url: String, url: String, ipfs_image: List String, ipfs_icon: String, category: Uint32, owner: ByStr20)
   CheckPause;
   IsManager;
   IsAlreadyApplication owner;
 
-  new_app = convert_app app;
+  new_app = Application title des_url url ipfs_image ipfs_icon category zero32 zero32;
   wait_list_app[owner] := new_app
 end
 
-transition AddAD(block: Uint128, url: String, ipfs: String, owner: ByStr20)
+transition AddAD(block: Uint256, url: String, ipfs: String, owner: ByStr20)
   CheckPause;
   IsManager;
   IsAlreadyAdvertising owner;
