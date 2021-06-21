@@ -2,7 +2,7 @@ import multer from 'multer';
 import express, { Request, Response, NextFunction } from 'express';
 import path from 'path';
 import fs from 'fs';
-import { pinImage } from '../../pinata';
+import { pinImage, pinJson } from '../../pinata';
 
 export const uploadRouter = express();
 
@@ -76,20 +76,14 @@ uploadRouter.post('/upload/img',
   }
 });
 
-uploadRouter.post('/upload/imgs', upload.array('images', 5), async (req: Request, res: Response) => {
+uploadRouter.post('/upload/json', async (req: Request, res: Response) => {
   try {
-    const hashs: string[] = [];
-    for (let index = 0; index < req.files.length; index++) {
-      const file = req.files[index];
-      const readableStreamForFile = fs.createReadStream(file.path);
-      const hash = await pinImage(readableStreamForFile);
-  
-      await fs.promises.unlink(file.path); 
+    const json = req.body;
+    const hash = await pinJson(json);
 
-      hashs.push(hash);
-    }
-
-    return res.status(201).json(hashs);
+    return res.status(201).json({
+      hash
+    });
   } catch (err) {
     return res.status(422).json({
       error: err.message
