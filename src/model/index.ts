@@ -1,7 +1,7 @@
-import { IPFSHash } from './ipfs';
-import { App } from './app';
+import { Advertising } from './advertising';
+import { Blockchain } from './blockchain';
 
 export default [
-  IPFSHash,
-  App
+  Advertising,
+  Blockchain
 ];
