@@ -4,6 +4,8 @@ library ZilPayExplorer
 
 (* Global variables *)
 let zero_address = 0x0000000000000000000000000000000000000000
+let zerobn  = BNum 0
+let zero256 = Uint256 0
 
 let one_msg =
   fun (msg: Message) =>
@@ -24,15 +26,34 @@ type Error =
   | CodeNotValidator
   | CodeNotFound
   | CodeAlreadyExists
+  | CodeInCauldron
+
+let option_value =
+  tfun 'A =>
+  fun (default: 'A) =>
+  fun (opt_val: Option 'A) =>
+    match opt_val with
+    | Some v => v
+    | None => default
+    end
+
+let option_uint256 = @option_value Uint256
+
+let bn_to_uint =
+  fun (block_number: BNum) =>
+  let int_block = builtin bsub block_number zerobn in
+  let some_int_block = builtin to_uint256 int_block in
+    option_uint256 zero256 some_int_block
 
 let make_error =
   fun (result : Error) =>
     let result_code =
       match result with
-      | CodeNotContractOwner      => Int32 -1
-      | CodeNotValidator          => Int32 -2
-      | CodeNotFound              => Int32 -3
-      | CodeAlreadyExists         => Int32 -4
+      | CodeNotContractOwner => Int32 -1
+      | CodeNotValidator     => Int32 -2
+      | CodeNotFound         => Int32 -3
+      | CodeAlreadyExists    => Int32 -4
+      | CodeInCauldron       => Int32 -5
       end
     in
     { _exception : "Error"; code : result_code }
@@ -91,17 +112,30 @@ end
 
 procedure RemoveAD(app_owner: ByStr20)
   some_ad <- ad_list[app_owner];
+  current_block <- & BLOCKNUMBER;
+  block_number = bn_to_uint current_block;
 
   match some_ad with
   | Some ad =>
-    delete ad_list[app_owner];
+    match ad with
+    | Banner block url ipfs =>
+      can_del = builtin lt block block_number;
 
-    e = {
-      _eventname : "ADRemoveEvent";
-      removed_ad: ad;
-      app_owner: app_owner
-    };
-    event e
+      match can_del with
+      | True =>
+        delete ad_list[app_owner];
+
+        e = {
+          _eventname : "ADRemoveEvent";
+          removed_ad: ad;
+          app_owner: app_owner
+        };
+        event e
+      | False =>
+        err = CodeInCauldron;
+        ThrowError err
+      end
+    end
   | None =>
     err = CodeNotFound;
     ThrowError err
@@ -132,8 +166,6 @@ transition RemoveApp(category: Uint32, app_owner: ByStr20)
 end
 
 transition RemoveADList(ad_owners: List ByStr20)
-  IsValidator;
-
   forall ad_owners RemoveAD
 end
 (* Admin transitions *)

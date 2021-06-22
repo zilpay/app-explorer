@@ -585,7 +585,6 @@ transition RemoveValidatorList(addresses: List ByStr20)
 end
 
 transition RemoveAdvertising(ad_owners: List ByStr20)
-  IsContractOwner;
   forall ad_owners SubCoefficient;
 
   call_remove_ad = {
