@@ -22,8 +22,8 @@ type App =
 type Banner =
 | Banner of Uint64 String String
 
-let customization = Uint256 100000000000000
-let max_blocks = Uint64 200
+let customization = Uint256 100000000
+let max_blocks = Uint64 3000
 let exponent = Uint32 2
 let zero256 = Uint256 0
 let zero128 = Uint128 0
@@ -123,7 +123,9 @@ contract BondingCurvedDistributor
 (
   contract_owner: ByStr20,
   moderator: ByStr20,
-  explorer: ByStr20,
+  explorer: ByStr20 with contract
+    field reserve: Uint64
+  end,
   zlp: ByStr20
 )
 
@@ -132,22 +134,11 @@ contract BondingCurvedDistributor
 (* Total token count *)
 field price_for_app: Uint128 = zero128
 field max_category: Uint32 = Uint32 7
-field reserve: Uint64 = Uint64 200
 
 (* Emit Errors *)
 procedure ThrowError(err : Error)
   e = make_error err;
   throw e
-end
-procedure OnlyExplorer()
-  is_explorer = builtin eq explorer _sender;
-
-  match is_explorer with
-  | False =>
-    err = CodeNotExplorer;
-    ThrowError err
-  | True =>
-  end
 end
 procedure IsContractOwner()
   is_contract_owner = builtin eq contract_owner _sender;
@@ -193,7 +184,7 @@ procedure CheckCategory(category: Uint32)
 end
 
 transition AddAdvertising(amount: Uint128, url: String, ipfs: String)
-  total_reserve <- reserve;
+  total_reserve <-& explorer.reserve;
 
   blocks_reserve = n_64_to_256 total_reserve;
   b = get_pool_balance blocks_reserve;
@@ -286,11 +277,6 @@ end
 (* Admin transitions *)
 
 (* callbacks *)
-transition AdvertisingAddSuccessCallBack(amount: Uint64)
-  OnlyExplorer;
-  reserve := amount
-end
-
 transition TransferFromSuccessCallBack(initiator: ByStr20, sender: ByStr20, recipient: ByStr20, amount: Uint128)
 end
 (* callbacks *)

@@ -92,6 +92,7 @@ field app_list: Map Uint32 (Map ByStr20 App) = Emp Uint32 (Map ByStr20 App)
 field ad_list: List Banner = nil_banner_list
 
 field validator_contract: ByStr20 = zero_address
+field reserve: Uint64 = Uint64 3000
 
 (* Emit Errors *)
 procedure ThrowError(err : Error)
@@ -134,6 +135,17 @@ transition ConfigureValidator(address: ByStr20)
   event e
 end
 
+transition ConfigureReserve(new_reserve: Uint64)
+  IsContractOwner;
+  reserve := new_reserve;
+
+  e = {
+    _eventname : "ReserveChangedEvent";
+    reserve: new_reserve
+  };
+  event e
+end
+
 transition RemoveApp(category: Uint32, app_owner: ByStr20)
   IsValidator;
   delete app_list[category][app_owner];
@@ -165,6 +177,7 @@ transition AddBanner(block: Uint64, end_block: Uint64, url: String, ipfs: String
 
   block_number <- & BLOCKNUMBER;
   list <- ad_list;
+  total_reserve <- reserve;
 
   current_block = bn_to_uint block_number;
   new_banner = Banner block end_block url ipfs;
@@ -172,12 +185,16 @@ transition AddBanner(block: Uint64, end_block: Uint64, url: String, ipfs: String
 
   match list_counter with
   | Pair filtered_list counter =>
+    new_reserve = builtin sub total_reserve counter;
+    new_reserve = builtin add new_reserve block;
     new_list = Cons {Banner} new_banner filtered_list;
     ad_list := new_list;
+    reserve := new_reserve;
 
     e = {
       _eventname : "AddedADEvent";
-      added_banner: new_banner
+      added_banner: new_banner;
+      reserve: new_reserve
     };
     event e
   end

@@ -1,12 +1,12 @@
 import matplotlib.pyplot as plt
 from random import *
 
-MAX_BLOCKS = 200
+MAX_BLOCKS = 3000
 EXPONENT = 2
 DECIMAL = 10 ** 18
-CUSTOMIZATION = 1000000000000
+CUSTOMIZATION = 100000000
 
-reserve = 200
+reserve = 3000
 
 def get_pool_balance(s):
     n = EXPONENT + 1
@@ -45,10 +45,12 @@ prices = []
 block_list = []
 
 for i in range(100):
-    amount = randint(1, 100) * (DECIMAL)
+    amount = randint(1, 1000) * (DECIMAL)
     # amount = 500 * DECIMAL
     (price, blocks) = buy(amount)
     reserve = reserve + blocks
+
+    print("Price %i, blocks %i" % (amount / DECIMAL, blocks))
 
     prices.append(price)
     block_list.append(blocks)
