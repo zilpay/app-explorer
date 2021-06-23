@@ -1,8 +1,9 @@
 import { Zilliqa } from '@zilliqa-js/zilliqa';
 import { Advertising } from '../model/advertising';
+import netwrok from '../config/netwrok';
 
 const EXPLORER = String(process.env.EXPLORER);
-const URL = String(process.env.PROVIDER);
+const URL = netwrok[String(process.env.NET)];
 const instance = new Zilliqa(URL);
 
 export async function getAdvertisingList(): Promise<Advertising[]> {

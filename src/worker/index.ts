@@ -18,8 +18,8 @@ const options: ConnectionOptions = {
 async function main() {
   const connection = await createConnection(options);
 
-  await updateAdvertising(connection);
   await updateBlockchain(connection);
+  await updateAdvertising(connection);
   await connection.close();
 }
 

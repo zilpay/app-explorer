@@ -1,8 +1,9 @@
 import { Zilliqa } from '@zilliqa-js/zilliqa';
 import { Blockchain } from '../model/blockchain';
+import netwrok from '../config/netwrok';
 
-const URL = String(process.env.PROVIDER);
 const NET = String(process.env.NET);
+const URL = netwrok[NET];
 const instance = new Zilliqa(URL);
 
 export async function getBlockNumber(): Promise<Blockchain> {

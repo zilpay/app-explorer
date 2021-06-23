@@ -4,6 +4,7 @@ import {
   getBlockNumber
 } from '../zilliqa';
 import { Blockchain } from '../model/blockchain';
+import { Advertising } from '../model/advertising';
 
 const NET = String(process.env.NET);
 
@@ -37,7 +38,14 @@ export async function updateAdvertising(cursor: Connection) {
   const list = await getAdvertisingList();
   const filtered = list.filter((ad) => ad.block >= found.numTxBlocks);
 
-  console.log(list);
+  console.log(filtered);
+
+  await cursor
+    .createQueryBuilder()
+    .insert()
+    .into(Advertising)
+    .values(filtered)
+    .execute();
 
   return filtered;
 }
