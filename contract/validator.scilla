@@ -10,15 +10,11 @@ type Application =
 
 (* Custom ADT storing - end_block_number, url, ipfs_banner_url, rejected, approve *)
 type Advertising =
-  | Advertising of Uint256 String String Uint32 Uint32
+  | Advertising of Uint64 String String Uint32 Uint32
 
 (* Custom ADT storing - Title, ipfs_description, url, ipfs_image, ipfs_icon, category *)
 type App =
   | App of String String String (List String) String Uint32
-
-(* Custom ADT storing - end_block_number, url, ipfs_banner_url *)
-type Banner =
-  | Banner of Uint256 String String
 
 type Operation =
   | Add
@@ -54,6 +50,9 @@ let zero128 = Uint128 0
 let zero32  = Uint32 0
 let zerobn  = BNum 0
 
+let zero64 = Uint64 0
+let one64 = Uint64 1
+
 let one32   = Uint32 1
 let two32   = Uint32 2
 
@@ -75,7 +74,7 @@ let option_value =
     | None => default
     end
 
-let option_uint256 = @option_value Uint256
+let option_uint64 = @option_value Uint64
 let option_uint128 = @option_value Uint128
 
 (* Calculate new amount of tokens *)
@@ -201,14 +200,8 @@ let percent_of_amount =
 let bn_to_uint =
   fun (block_number: BNum) =>
   let int_block = builtin bsub block_number zerobn in
-  let some_int_block = builtin to_uint256 int_block in
-    option_uint256 zero256 some_int_block
-
-let get_block_amount =
-  fun (ad: Advertising) =>
-    match ad with
-      | Advertising block url ipfs rejected approve => block
-      end
+  let some_int_block = builtin to_uint64 int_block in
+    option_uint64 zero64 some_int_block
 
 let build_banner_msg =
   fun (ad: Advertising) =>
@@ -217,25 +210,18 @@ let build_banner_msg =
   fun (current_block: BNum) =>
     match ad with
     | Advertising block url ipfs rejected approve =>
-      let block_256 = bn_to_uint current_block in
-      let end_block = builtin add block_256 block in
+      let block_64 = bn_to_uint current_block in
+      let end_block = builtin add block_64 block in
       let msg = {
         _tag : "AddBanner";
         _recipient: explorer;
         _amount: Uint128 0;
+        block: block;
         end_block: end_block;
         url: url;
-        ipfs: ipfs;
-        owner: owner
+        ipfs: ipfs
       } in one_msg msg
     end
-
-let convert_banner =
-  fun (banner: Banner) =>
-  match banner with
-  | Banner block url ipfs =>
-    Advertising block url ipfs zero32 zero32
-  end
 
 let make_error =
   fun (result : Error) =>
@@ -269,7 +255,6 @@ field min_stake_amount: Uint128 = zero128
 field manager: ByStr20 = zero_address
 field rewards_fee: Uint128 = Uint128 10
 
-field blocks_list: Map ByStr20 Uint256 = Emp ByStr20 Uint256
 field advertiser_list: Map ByStr20 Uint128 = Emp ByStr20 Uint128
 field wait_list_app: Map ByStr20 Application = Emp ByStr20 Application
 field wait_ad_list: Map ByStr20 Advertising = Emp ByStr20 Advertising
@@ -474,34 +459,6 @@ procedure ConfigureAdvertiserBalance(address: ByStr20, amount: Uint128, operatio
   end
 end
 
-procedure ConfigureCoefficient(amount: Uint256, op: Operation)
-  recipient <- manager;
-  is_increase = match op with
-  | Add => True
-  | Sub => False
-  end;
-
-  msg_configure_coefficient = {
-    _tag: "ConfigureCoefficient";
-    _recipient: recipient;
-    _amount: zero128;
-    amount: amount;
-    op: is_increase
-  };
-  msgs = one_msg msg_configure_coefficient;
-  send msgs
-end
-
-procedure SubCoefficient(address: ByStr20)
-  some_amount <- blocks_list[address];
-
-  match some_amount with
-  | Some amount =>
-    ConfigureCoefficient amount sub_operation
-  | None =>
-  end
-end
-
 procedure CallTransfer(to: ByStr20, amount: Uint128)
   msg_transfer = {
     _tag: "Transfer";
@@ -584,21 +541,6 @@ transition RemoveValidatorList(addresses: List ByStr20)
   forall addresses WithdrawTokens
 end
 
-transition RemoveAdvertising(ad_owners: List ByStr20)
-  forall ad_owners SubCoefficient;
-
-  call_remove_ad = {
-    _tag: "RemoveADList";
-    _recipient: explorer;
-    _amount: Uint128 0;
-    ad_owners: ad_owners
-  };
-
-  msgs = one_msg call_remove_ad;
-
-  send msgs
-end
-
 transition RemoveApplication(app_owner: ByStr20, category: Uint32)
   IsContractOwner;
 
@@ -660,15 +602,12 @@ transition ApproveAdvertising(owner: ByStr20, approved: Uint32)
     | Approve =>
       current_block <- & BLOCKNUMBER;
       new_advertiser_amount = builtin sub advertiser_amount rewards;
-      blocks_amount = get_block_amount ad;
 
       ConfigureValidatorBalance _this_address new_advertiser_amount add_operation;
-      ConfigureCoefficient blocks_amount add_operation;
 
       delete wait_ad_list[owner];
       delete advertiser_list[owner];
       delete moderators_vote_list_banner[owner];
-      blocks_list[owner] := blocks_amount;
 
       msg = build_banner_msg new_ad owner explorer current_block;
       send msg
@@ -724,13 +663,12 @@ transition AddApp(title: String, des_url: String, url: String, ipfs_image: List 
   wait_list_app[owner] := new_app
 end
 
-transition AddAD(block: Uint256, url: String, ipfs: String, owner: ByStr20)
+transition AddAD(block: Uint64, url: String, ipfs: String, owner: ByStr20)
   CheckPause;
   IsManager;
   IsAlreadyAdvertising owner;
 
-  new_banner = Banner block url ipfs;
-  new_ad = convert_banner new_banner;
+  new_ad = Advertising block url ipfs zero32 zero32;
   wait_ad_list[owner] := new_ad
 end
 (* manager transitions *)

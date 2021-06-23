@@ -9,7 +9,7 @@ library BondingCurvedDistributor
 (* Error events *)
 type Error =
   | CodeNotAuthorised
-  | CodeNotModerator
+  | CodeNotExplorer
   | CodeInsufficientFunds
   | CodeNotContractOwner
   | CodeIncorrectCategory
@@ -20,15 +20,16 @@ type App =
 
 (* Custom ADT storing - end_block_number, url, ipfs_banner_url *)
 type Banner =
-| Banner of Uint256 String String
+| Banner of Uint64 String String
 
 let customization = Uint256 100000000000000
-let max_blocks = Uint256 200
+let max_blocks = Uint64 200
 let exponent = Uint32 2
 let zero256 = Uint256 0
 let zero128 = Uint128 0
 let one256 = Uint256 1
 let one32 = Uint32 1
+let zero64 = Uint64 0
 
 let one_msg = 
   fun (msg : Message) => 
@@ -40,7 +41,7 @@ let make_error =
     let result_code = 
       match result with
       | CodeNotAuthorised     => Int32 -1
-      | CodeNotModerator      => Int32 -2
+      | CodeNotExplorer       => Int32 -2
       | CodeInsufficientFunds => Int32 -3
       | CodeNotContractOwner  => Int32 -4
       | CodeIncorrectCategory => Int32 -5
@@ -59,18 +60,24 @@ let option_value =
 
 let option_uint256 = @option_value Uint256
 let option_uint128 = @option_value Uint128
+let option_uint64 = @option_value Uint64
 
-let to_256 =
+let n_32_to_256 =
   fun (v: Uint32) =>
     let v32 = builtin to_uint256 v in
       option_uint256 zero256 v32
+
+let n_64_to_256 =
+  fun (v: Uint64) =>
+    let v64 = builtin to_uint256 v in
+      option_uint256 zero256 v64
 
 (* b = customization / exponent + 1 * s**(exponent + 1) *)
 (* s - total_supply *)
 let get_pool_balance =
   fun (s: Uint256) =>
     let n = builtin add exponent one32 in
-    let n256 = to_256 n in
+    let n256 = n_32_to_256 n in
     let mn = builtin div customization n256 in
     let ts = builtin add s one256 in
     let s_pow = builtin pow ts n in
@@ -83,9 +90,9 @@ let get_price =
   fun (s: Uint256) =>
   fun (b: Uint256) =>
     let n = builtin add exponent one32 in
-    let n256 = to_256 n in
+    let n256 = n_32_to_256 n in
     let mn = builtin div customization n256 in
-    let k256 = to_256 one32 in
+    let k256 = n_32_to_256 one32 in
     let ts = builtin add s one256 in
     let sk = builtin add ts k256 in
     let sk_exp = builtin pow sk n in
@@ -94,15 +101,6 @@ let get_price =
     let some_amount = builtin to_uint128 amount in
       option_uint128 zero128 some_amount
 
-let reserve_update =
-  fun (amount: Uint256) =>
-  fun (reserve: Uint256) =>
-  fun (op: Bool) =>
-    match op with
-    | True => builtin add reserve amount
-    | False => builtin sub reserve amount
-    end
-
 (* divides amount and decimal - amount / decimal *)
 (* amount - ZLP amount *)
 (* decimal - ZLP decimal *)
@@ -110,11 +108,11 @@ let zlp_to_blocks =
   fun (amount: Uint128) =>
   fun (block_decimal: Uint128) =>
     let value128 = builtin div amount block_decimal in
-    let some_256_value = builtin to_uint256 value128 in
-    let value256 = option_uint256 zero256 some_256_value in
-    let is_max = builtin lt value256 max_blocks in
+    let some_64_value = builtin to_uint64 value128 in
+    let value64 = option_uint64 zero64 some_64_value in
+    let is_max = builtin lt value64 max_blocks in
       match is_max with
-      | True => value256
+      | True => value64
       | False => max_blocks
       end
 (***************************************************)
@@ -125,6 +123,7 @@ contract BondingCurvedDistributor
 (
   contract_owner: ByStr20,
   moderator: ByStr20,
+  explorer: ByStr20,
   zlp: ByStr20
 )
 
@@ -133,19 +132,19 @@ contract BondingCurvedDistributor
 (* Total token count *)
 field price_for_app: Uint128 = zero128
 field max_category: Uint32 = Uint32 7
-field reserve: Uint256 = Uint256 200
+field reserve: Uint64 = Uint64 200
 
 (* Emit Errors *)
 procedure ThrowError(err : Error)
   e = make_error err;
   throw e
 end
-procedure IsModerator()
-  is_moderator = builtin eq moderator _sender;
+procedure OnlyExplorer()
+  is_explorer = builtin eq explorer _sender;
 
-  match is_moderator with
+  match is_explorer with
   | False =>
-    err = CodeNotModerator;
+    err = CodeNotExplorer;
     ThrowError err
   | True =>
   end
@@ -180,24 +179,6 @@ procedure TransferFrom(amount: Uint128, from: ByStr20)
   | True =>
   end
 end
-procedure SendADToCheck(ad: Banner, owner: ByStr20)
-  match ad with
-  | Banner block url ipfs =>
-    call_add_ad = {
-      _tag: "AddAD";
-      _recipient: moderator;
-      _amount: Uint128 0;
-      block: block;
-      url: url;
-      ipfs: ipfs;
-      owner: owner
-    };
-
-    msgs = one_msg call_add_ad;
-
-    send msgs
-  end
-end
 procedure CheckCategory(category: Uint32)
   max <- max_category;
 
@@ -211,20 +192,32 @@ procedure CheckCategory(category: Uint32)
   end
 end
 
-transition AddAdvertising(amount: Uint128, url: String, banner_url: String)
+transition AddAdvertising(amount: Uint128, url: String, ipfs: String)
   total_reserve <- reserve;
 
-  b = get_pool_balance total_reserve;
-  price = get_price total_reserve b;
+  blocks_reserve = n_64_to_256 total_reserve;
+  b = get_pool_balance blocks_reserve;
+  price = get_price blocks_reserve b;
   blocks = zlp_to_blocks amount price;
-  is_zero = builtin eq blocks zero256;
+  is_zero = builtin eq blocks zero64;
 
   match is_zero with
   | False =>
-    new_ad = Banner blocks url banner_url;
+    new_ad = Banner blocks url ipfs;
 
     TransferFrom amount _sender;
-    SendADToCheck new_ad _sender;
+
+    call_add_ad = {
+      _tag: "AddAD";
+      _recipient: moderator;
+      _amount: Uint128 0;
+      block: blocks;
+      url: url;
+      ipfs: ipfs;
+      owner: _sender
+    };
+    msgs = one_msg call_add_ad;
+    send msgs;
 
     e = {
       _eventname : "AddAdvertisingEvent";
@@ -293,12 +286,9 @@ end
 (* Admin transitions *)
 
 (* callbacks *)
-transition ConfigureCoefficient(amount: Uint256, op: Bool)
-  IsModerator;
-
-  total_reserve <- reserve;
-  new_total_reserve = reserve_update amount total_reserve op;
-  reserve := new_total_reserve
+transition AdvertisingAddSuccessCallBack(amount: Uint64)
+  OnlyExplorer;
+  reserve := amount
 end
 
 transition TransferFromSuccessCallBack(initiator: ByStr20, sender: ByStr20, recipient: ByStr20, amount: Uint128)
