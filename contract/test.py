@@ -1,12 +1,12 @@
 import matplotlib.pyplot as plt
 from random import *
 
-MAX_BLOCKS = 3000
+MAX_BLOCKS = 5000
 EXPONENT = 2
 DECIMAL = 10 ** 18
 CUSTOMIZATION = 100000000
 
-reserve = 3000
+reserve = 5000
 
 def get_pool_balance(s):
     n = EXPONENT + 1

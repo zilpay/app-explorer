@@ -23,7 +23,7 @@ type Banner =
 | Banner of Uint64 String String
 
 let customization = Uint256 100000000
-let max_blocks = Uint64 3000
+let max_blocks = Uint64 5000
 let exponent = Uint32 2
 let zero256 = Uint256 0
 let zero128 = Uint128 0

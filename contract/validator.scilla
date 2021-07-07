@@ -246,7 +246,8 @@ contract ZilPayValidator
 (
   contract_owner: ByStr20,
   explorer: ByStr20,
-  zlp: ByStr20
+  zlp: ByStr20,
+  wallet: ByStr20
 )
 
 (* Mutable fields *)
@@ -525,15 +526,13 @@ transition ConfigurePause()
   end
 end
 
-transition WithdrawSelf(to: ByStr20)
-  IsContractOwner;
-
+transition WithdrawSelf()
   some_balance <- holder_list[_this_address];
 
   balance = option_uint128 zero128 some_balance;
 
   ConfigureValidatorBalance _this_address balance sub_operation;
-  CallTransfer to balance
+  CallTransfer wallet balance
 end
 
 transition RemoveValidatorList(addresses: List ByStr20)

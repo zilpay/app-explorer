@@ -92,7 +92,7 @@ field app_list: Map Uint32 (Map ByStr20 App) = Emp Uint32 (Map ByStr20 App)
 field ad_list: List Banner = nil_banner_list
 
 field validator_contract: ByStr20 = zero_address
-field reserve: Uint64 = Uint64 3000
+field reserve: Uint64 = Uint64 5000
 
 (* Emit Errors *)
 procedure ThrowError(err : Error)
