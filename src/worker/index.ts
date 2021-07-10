@@ -39,7 +39,13 @@ async function updateReserve() {
   await redis.setAsync(RedisKeys.Reserve, String(reserve));
 }
 
+async function updateblockNumber() {
+  const { header } = await explorer.getLatestTxBlock();  
+  await redis.setAsync(RedisKeys.BlockNumber, header.BlockNum);
+}
+
 
 updateAds();
 updateApps();
 updateReserve();
+updateblockNumber();

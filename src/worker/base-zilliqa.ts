@@ -11,6 +11,18 @@ export class Zilliqa {
     this._node = node;
   }
 
+  public async getLatestTxBlock() {
+    const request = this._json(Methods.GetLatestTxBlock, []);
+    const responce = await fetch(this._node, request);
+    const data = await responce.json();
+
+    if (data.error) {
+      throw new Error(data.error.message);
+    }
+
+    return data.result;
+  }
+
   public async getSmartContractSubState(
     contract: string,
     field: string,
