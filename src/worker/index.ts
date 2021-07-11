@@ -48,8 +48,11 @@ async function updateblockNumber() {
 }
 
 async function main() {
+  console.log(new Date(), 'start');
   const previousBlockNumber = await redis.getAsync(RedisKeys.BlockNumber);
   const currentBlockNumber = await updateblockNumber();
+
+  console.log('previous:', previousBlockNumber, 'current:', currentBlockNumber);
 
   if (Number(previousBlockNumber) < currentBlockNumber) {
     await updateAds();
