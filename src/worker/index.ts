@@ -42,10 +42,24 @@ async function updateReserve() {
 async function updateblockNumber() {
   const { header } = await explorer.getLatestTxBlock();  
   await redis.setAsync(RedisKeys.BlockNumber, header.BlockNum);
+
+
+  return Number(header.BlockNum);
 }
 
+async function main() {
+  const previousBlockNumber = await redis.getAsync(RedisKeys.BlockNumber);
+  const currentBlockNumber = await updateblockNumber();
 
-updateAds();
-updateApps();
-updateReserve();
-updateblockNumber();
+  if (Number(previousBlockNumber) < currentBlockNumber) {
+    await updateAds();
+    await updateApps();
+    await updateReserve();
+  }
+}
+
+main();
+
+setInterval(async() => {
+  await main();
+}, 30000);
