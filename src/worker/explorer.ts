@@ -27,13 +27,15 @@ export class Explorer extends Zilliqa {
         continue;
       }
 
-      list[index] = Object.values(res[this._app][index]).map((el: any) => ({
-        title: el.arguments[0],
-        description: el.arguments[1],
-        url: el.arguments[2],
-        images: el.arguments[3],
-        icon: el.arguments[4],
-        category: el.arguments[5]
+
+      list[index] = Object.keys(res[this._app][index]).map((key: string) => ({
+        owner: key,
+        title: res[this._app][index][key].arguments[0],
+        description: res[this._app][index][key].arguments[1],
+        url: res[this._app][index][key].arguments[2],
+        images: res[this._app][index][key].arguments[3],
+        icon: res[this._app][index][key].arguments[4],
+        category: res[this._app][index][key].arguments[5]
       }));
     }
 

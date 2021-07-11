@@ -1,8 +1,8 @@
 import { app } from './server';
 
-import './pinata';
+// import './pinata';
 
-const PORT = 3000;
+const PORT = 5000;
 
 export async function main() {
   app.listen(PORT, () => {
