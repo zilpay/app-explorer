@@ -1,7 +1,8 @@
 import express from 'express';
-
-import { uploadRouter } from './upload';
+import { adsRouter } from './ads';
+import { AppsRouter } from './app';
 
 export const router = express();
 
-router.use('/api/v1/', uploadRouter);
+router.use(adsRouter);
+router.use(AppsRouter);
